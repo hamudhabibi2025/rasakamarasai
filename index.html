@@ -28,6 +28,15 @@
             min-height: calc(100% - 1rem);
             padding-top: 10vh; /* Sesuaikan padding untuk sepertiga atas */
         }
+        
+        /* Persyaratan 9: Loading JANGAN MENGGANGGU */
+        .modal-loading .modal-content {
+            background: transparent;
+            border: none;
+        }
+        .modal-loading .modal-backdrop {
+            opacity: 0.1 !important; /* Transparansi rendah */
+        }
 
         /* CSS Chat Interface (Persyaratan 9) */
         .chat-card { height: 70vh !important; }
@@ -39,7 +48,7 @@
         }
         .chat-message { max-width: 75%; padding: 8px; border-radius: 10px; margin-bottom: 5px; }
         .chat-message.me { background-color: #DCF8C6; align-self: flex-end; } /* Hijau Muda, kanan */
-        .chat-message.other { background-color: #FFFFFF; align-self: flex-start; } /* Putih/Terang, kiri */
+        .chat-message.other { background-color: #FFFFFF; align-self: flex-start; border: 1px solid #eee; } /* Putih/Terang, kiri */
     </style>
 </head>
 <body>
@@ -47,8 +56,14 @@
 <div id="app" class="container mt-5">
     </div>
 
-<div id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 2000; display: none; justify-content: center; align-items: center;">
-    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+<div class="modal fade modal-loading" id="loadingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"><span class="visually-hidden">Loading...</span></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="notificationContainer"></div>
@@ -80,8 +95,21 @@
     // =======================================================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzz3iH0IcwSQG0BFrvzebJbPtkiru-zKff32B_Oz1AgnUBuZQ2--nWRzh3BvTvTbkzk/exec';
     
+    let loadingModalInstance;
+    let allUsers = []; // Variabel global untuk menyimpan daftar pengguna chat
+
     // --- UTILITY FUNCTIONS ---
-    function showLoading(show) { $('#loadingOverlay').css('display', show ? 'flex' : 'none'); }
+    // Persyaratan 9: Loading JANGAN MENGGANGGU
+    function showLoading(show) {
+        if (!loadingModalInstance) {
+            loadingModalInstance = new bootstrap.Modal(document.getElementById('loadingModal'));
+        }
+        if (show) {
+            loadingModalInstance.show();
+        } else {
+            loadingModalInstance.hide();
+        }
+    }
     
     // Persyaratan 1: Notifikasi Melayang
     function showNotification(message, type = 'success') {
@@ -144,9 +172,23 @@
         }
     }
     
+    // Persyaratan 5 & 6: Logika Kolom USIA
+    function calculateAge(dateString) {
+        const today = new Date();
+        const birthDate = new Date(dateString);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age >= 0 ? age : 0;
+    }
+
+
     // --- VIEW FUNCTIONS ---
     
     function renderLogin() {
+        // ... (Kode renderLogin sama seperti sebelumnya) ...
         const html = `
             <div class="row justify-content-center">
                 <div class="col-md-6 col-lg-4">
@@ -205,14 +247,26 @@
         }
     }
 
-    function renderDashboard(user) {
+    async function renderDashboard(user) {
+        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
+        
+        // Persyaratan 7: ADMIN KLUB TIDAK PUNYA AKSES KE MEDIA BERITA
         const tabItems = [
-            { id: 'a1', name: 'FORM A1 (Data Klub)' },
-            { id: 'a2', name: 'FORM A2 (Pemain Kolektif)' },
-            { id: 'a3', name: 'FORM A3 (Pendaftaran Pertandingan)' },
-            { id: 'berita', name: 'BERITA PSSI MENTAWAI' },
-            { id: 'chat', name: 'CHATHISTORY ANTAR ADMIN' }
-        ];
+            { id: 'a1', name: 'FORM A1 (Data Klub)', requiredRole: ['ADMIN_PUSAT', 'ADMIN_KLUB'] },
+            { id: 'a2', name: 'FORM A2 (Pemain Kolektif)', requiredRole: ['ADMIN_PUSAT', 'ADMIN_KLUB'] },
+            { id: 'a3', name: 'FORM A3 (Pendaftaran Pertandingan)', requiredRole: ['ADMIN_PUSAT', 'ADMIN_KLUB'] },
+            { id: 'berita', name: 'BERITA PSSI MENTAWAI', requiredRole: ['ADMIN_PUSAT', 'ADMIN_MEDIA'] }, // Hanya untuk non-klub
+            { id: 'chat', name: 'CHATHISTORY ANTAR ADMIN', requiredRole: ['ADMIN_PUSAT', 'ADMIN_MEDIA', 'ADMIN_KLUB'] } // Semua bisa chat
+        ].filter(item => item.requiredRole.includes(user.tipe_user));
+
+        // Ambil daftar user untuk chat
+        try {
+            allUsers = await callAppsScript('readAllUsernames');
+        } catch (e) {
+            console.error("Gagal memuat daftar user chat:", e);
+            allUsers = [];
+        }
+
 
         const navHtml = `
             <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -244,9 +298,9 @@
             <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" id="${item.id}-content" role="tabpanel" aria-labelledby="${item.id}-tab">
                 <h3 class="mt-3">${item.name}</h3>
                 <div id="content-${item.id}">
-                    ${item.id === 'a1' ? '<button class="btn btn-success my-2" id="openA1Modal">Tambah Data Klub</button><div id="dataA1"></div>' : ''}
+                    ${item.id === 'a1' ? `<button class="btn btn-success my-2" id="openA1Modal">${isKlubAdmin ? 'Input/Edit Data Klub Saya' : 'Tambah Data Klub'}</button><div id="dataA1"></div>` : ''}
                     ${item.id === 'a2' ? '<button class="btn btn-success my-2" id="openA2Modal">Tambah Pemain Kolektif</button><div id="dataA2"></div>' : ''}
-                    ${item.id === 'a3' ? '<button class="btn btn-success my-2" id="openA3Modal">Input Pendaftaran Pertandingan</button><div id="dataA3"></div>' : ''}
+                    ${item.id === 'a3' ? '<button class="btn btn-info my-2" id="openA3Modal">Input Pendaftaran Pertandingan</button><div id="dataA3"></div>' : ''}
                     ${item.id === 'berita' ? '<button class="btn btn-warning my-2" id="openBeritaModal">Tulis Berita Baru</button><div id="dataBerita"></div>' : ''}
                     ${item.id === 'chat' ? '<div id="chatInterface" class="chat-card"></div>' : ''}
                 </div>
@@ -268,34 +322,48 @@
         $('#logoutBtn').on('click', function() { showConfirmation('Anda yakin ingin logout?', handleLogout); });
         
         // Panggil Loaders
-        loadDataA1();
-        loadDataA2();
-        loadDataA3();
-        loadDataBerita();
-        setupChatInterface(user.username);
+        if (tabItems.some(i => i.id === 'a1')) loadDataA1();
+        if (tabItems.some(i => i.id === 'a2')) loadDataA2();
+        if (tabItems.some(i => i.id === 'a3')) loadDataA3();
+        if (tabItems.some(i => i.id === 'berita')) loadDataBerita();
+        if (tabItems.some(i => i.id === 'chat')) setupChatInterface(user.username);
         
         // Event listeners untuk Modal
-        $('#openA1Modal').on('click', () => renderModalA1());
+        $('#openA1Modal').on('click', () => {
+            if (isKlubAdmin) {
+                renderModalA1(user.id_klub); // ADMIN KLUB selalu edit/input data klubnya sendiri
+            } else {
+                 renderModalA1(); // ADMIN PUSAT/MEDIA bisa menambah baru
+            }
+        });
         $('#openA2Modal').on('click', () => renderModalA2());
         $('#openA3Modal').on('click', () => renderModalA3());
         $('#openBeritaModal').on('click', () => renderModalBerita());
     }
 
     // --- CRUD/DATA FUNCTIONS (READERS) ---
+    // ... (loadDataA1, loadDataA2, loadDataA3, loadDataBerita - logikanya sudah diperbaiki di backend)
     async function loadDataA1() {
         const tokenId = localStorage.getItem('tokenId');
+        const user = JSON.parse(localStorage.getItem('userProfile'));
+        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
+        
         try {
             const data = await callAppsScript('readA1', { token_id: tokenId });
-            // Simplified table rendering...
             let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_KLUB</th><th>NAMA_RESMI_KLUB</th><th>MANAJER</th><th>HP_MANAJER</th><th>Aksi</th></tr></thead><tbody>';
             if (data.length > 0) {
                 data.forEach(row => {
+                    // ADMIN KLUB hanya bisa edit data klubnya sendiri, ADMIN PUSAT bisa edit semua
+                    const editButton = (isKlubAdmin && String(row.ID_KLUB) !== String(user.id_klub)) ? 
+                                       `<button class="btn btn-sm btn-secondary" disabled>Edit</button>` :
+                                       `<button class="btn btn-sm btn-info edit-a1" data-id="${row.ID_KLUB}">Edit</button>`;
+
                     tableHtml += `<tr>
                         <td>${row.ID_KLUB}</td>
                         <td>${row.NAMA_RESMI_KLUB}</td>
                         <td>${row.MANAJER}</td>
                         <td>${row.HP_MANAJER}</td>
-                        <td><button class="btn btn-sm btn-info edit-a1" data-id="${row.ID_KLUB}">Edit</button></td>
+                        <td>${editButton}</td>
                     </tr>`;
                 });
                 tableHtml += '</tbody></table>';
@@ -309,20 +377,29 @@
 
     async function loadDataA2() {
         const tokenId = localStorage.getItem('tokenId');
+        const user = JSON.parse(localStorage.getItem('userProfile'));
+        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
+
         try {
             const data = await callAppsScript('readA2', { token_id: tokenId });
             let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_PEMAIN</th><th>NAMA_LENGKAP</th><th>NPG</th><th>TANGGAL_LAHIR</th><th>Aksi</th></tr></thead><tbody>';
             if (data.length > 0) {
                 data.forEach(row => {
+                    const actions = [];
+                    // ADMIN KLUB hanya bisa edit/hapus pemainnya sendiri
+                    if (!isKlubAdmin || (isKlubAdmin && String(row.ID_KLUB) === String(user.id_klub))) {
+                         actions.push(`<button class="btn btn-sm btn-info edit-a2" data-id="${row.ID_PEMAIN}">Edit</button>`);
+                         actions.push(`<button class="btn btn-sm btn-danger delete-a2" data-id="${row.ID_PEMAIN}">Hapus</button>`);
+                    } else {
+                        actions.push(`<button class="btn btn-sm btn-secondary" disabled>Aksi</button>`);
+                    }
+
                     tableHtml += `<tr>
                         <td>${row.ID_PEMAIN}</td>
                         <td>${row.NAMA_LENGKAP}</td>
                         <td>${row.NPG}</td>
                         <td>${row.TANGGAL_LAHIR}</td>
-                        <td>
-                            <button class="btn btn-sm btn-info edit-a2" data-id="${row.ID_PEMAIN}">Edit</button>
-                            <button class="btn btn-sm btn-danger delete-a2" data-id="${row.ID_PEMAIN}">Hapus</button>
-                        </td>
+                        <td>${actions.join(' ')}</td>
                     </tr>`;
                 });
                 tableHtml += '</tbody></table>';
@@ -338,15 +415,8 @@
         } catch (error) { $('#dataA2').html('<p class="text-danger">Gagal memuat data FORM A2.</p>'); }
     }
 
-    async function handleDeleteA2(id_pemain) {
-        try {
-            const result = await callAppsScript('deleteA2', { id_pemain });
-            showNotification(`Pemain ID ${result.id} berhasil dihapus.`, 'success');
-            loadDataA2();
-        } catch (error) { /* Handled in callAppsScript */ }
-    }
-
     async function loadDataA3() {
+        // Logika tampilan sama, filternya sudah di backend
         const tokenId = localStorage.getItem('tokenId');
         try {
             const data = await callAppsScript('readA3', { token_id: tokenId });
@@ -367,6 +437,7 @@
     }
 
     async function loadDataBerita() {
+        // Logika CRUD Berita tetap hanya untuk Admin Pusat/Media, karena akses tab sudah difilter
         try {
             const data = await callAppsScript('readBerita');
             let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_BERITA</th><th>TANGGAL</th><th>JUDUL_BERITA</th><th>PENULIS</th><th>Aksi</th></tr></thead><tbody>';
@@ -395,22 +466,22 @@
             });
         } catch (error) { $('#dataBerita').html('<p class="text-danger">Gagal memuat data Berita.</p>'); }
     }
+    
+    // --- MODAL RENDERING (Diperbaiki UI-nya) ---
 
-    async function handleDeleteBerita(id_berita) {
-        try {
-            const result = await callAppsScript('deleteBerita', { id_berita });
-            showNotification(`Berita ID ${result.id} berhasil dihapus.`, 'success');
-            loadDataBerita();
-        } catch (error) { /* Handled in callAppsScript */ }
-    }
-
-    // --- MODAL RENDERING (LENGKAP SEMUA FIELDS) ---
-
-    // 5. FORM A1 (DATA KLUB) - Lengkap Fields
+    // 1. FORM A1 (DATA KLUB) - Disesuaikan UI-nya dengan FORM A1.pdf
     async function renderModalA1(idKlubToEdit = null) {
+        const user = JSON.parse(localStorage.getItem('userProfile'));
+        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
+        
+        // ADMIN KLUB hanya bisa input/edit data klubnya sendiri
+        if (isKlubAdmin && !idKlubToEdit) {
+            idKlubToEdit = user.id_klub; // Coba ambil data klubnya jika ada
+        }
+        
         const isEdit = idKlubToEdit !== null;
         const modalId = 'modalA1';
-        $(`#${modalId}`).remove(); // Hapus modal lama
+        $(`#${modalId}`).remove();
         
         const modalA1Html = `
             <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA1Label" aria-hidden="true">
@@ -419,50 +490,44 @@
                         <div class="modal-header bg-primary text-white"><h5 class="modal-title" id="modalA1Label">${isEdit ? 'Edit' : 'Tambah'} Data Klub (A1)</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
                         <div class="modal-body">
                             <form id="formA1">
-                                <input type="hidden" id="modeA1" value="${isEdit ? 'update' : 'create'}">
+                                <h5 class="border-bottom pb-2">DATA KLUB</h5>
                                 <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" name="ID_KLUB" id="idKlubA1" required ${isEdit ? 'readonly' : ''}></div>
-                                    <div class="col-md-9 mb-3"><label class="form-label">NAMA_RESMI_KLUB</label><input type="text" class="form-control" name="NAMA_RESMI_KLUB" required></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">ID KLUB</label><input type="text" class="form-control" name="ID_KLUB" id="idKlubA1" value="${isKlubAdmin ? user.id_klub : ''}" required ${isKlubAdmin || isEdit ? 'readonly' : ''}></div>
+                                    <div class="col-md-9 mb-3"><label class="form-label">NAMA RESMI KLUB</label><input type="text" class="form-control" name="NAMA_RESMI_KLUB" required></div>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-6 mb-3"><label class="form-label">JULUKAN_KLUB</label><input type="text" class="form-control" name="JULUKAN_KLUB"></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">TANGGAL_BERDIRI</label><input type="date" class="form-control" name="TANGGAL_BERDIRI"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">JULUKAN KLUB</label><input type="text" class="form-control" name="JULUKAN_KLUB"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">TANGGAL BERDIRI</label><input type="date" class="form-control" name="TANGGAL_BERDIRI"></div>
                                 </div>
                                 
                                 <h6 class="mt-4 border-bottom pb-2">Alamat & Kontak Klub</h6>
                                 <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">ALAMAT</label><input type="text" class="form-control" name="ALAMAT"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">DESA</label><input type="text" class="form-control" name="DESA"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">KECAMATAN</label><input type="text" class="form-control" name="KECAMATAN"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">PROVINSI</label><input type="text" class="form-control" name="PROVINSI"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">ALAMAT</label><input type="text" class="form-control" name="ALAMAT"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">DESA</label><input type="text" class="form-control" name="DESA"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">KECAMATAN</label><input type="text" class="form-control" name="KECAMATAN"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">PROVINSI</label><input type="text" class="form-control" name="PROVINSI"></div>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-6 mb-3"><label class="form-label">NO_HANDPHONE</label><input type="tel" class="form-control" name="NO_HANDPHONE"></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">EMAIL</label><input type="email" class="form-control" name="EMAIL"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NO. HANDPHONE (KLUB)</label><input type="tel" class="form-control" name="NO_HANDPHONE"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">EMAIL (KLUB)</label><input type="email" class="form-control" name="EMAIL"></div>
                                 </div>
 
-                                <h6 class="mt-4 border-bottom pb-2">Manajemen & Staf</h6>
+                                <h5 class="mt-4 border-bottom pb-2">DATA PENGURUS KLUB</h5>
                                 <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">MANAJER</label><input type="text" class="form-control" name="MANAJER"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">HP_MANAJER</label><input type="tel" class="form-control" name="HP_MANAJER"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">ASISTEN_MANAJER</label><input type="text" class="form-control" name="ASISTEN_MANAJER"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">HP_ASISTEN_MANAJER</label><input type="tel" class="form-control" name="HP_ASISTEN_MANAJER"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">SEKRETARIS</label><input type="text" class="form-control" name="SEKRETARIS"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">HP_SEKRETARIS</label><input type="tel" class="form-control" name="HP_SEKRETARIS"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">BENDAHARA</label><input type="text" class="form-control" name="BENDAHARA"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">HP_BENDAHARA</label><input type="tel" class="form-control" name="HP_BENDAHARA"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">STAFF_MEDIA</label><input type="text" class="form-control" name="STAFF_MEDIA"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">HP_STAFF_MEDIA</label><input type="tel" class="form-control" name="HP_STAFF_MEDIA"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">PELATIH</label><input type="text" class="form-control" name="PELATIH"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">ASISTEN_PELATIH</label><input type="text" class="form-control" name="ASISTEN_PELATIH"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">STAFF_LAINNYA_1</label><input type="text" class="form-control" name="STAFF_LAINNYA_1"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">STAFF_LAINNYA_2</label><input type="text" class="form-control" name="STAFF_LAINNYA_2"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">MANAJER</label><input type="text" class="form-control" name="MANAJER"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">HP MANAJER</label><input type="tel" class="form-control" name="HP_MANAJER"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">ASISTEN MANAJER</label><input type="text" class="form-control" name="ASISTEN_MANAJER"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">HP ASISTEN MANAJER</label><input type="tel" class="form-control" name="HP_ASISTEN_MANAJER"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">SEKRETARIS</label><input type="text" class="form-control" name="SEKRETARIS"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">HP SEKRETARIS</label><input type="tel" class="form-control" name="HP_SEKRETARIS"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">BENDAHARA</label><input type="text" class="form-control" name="BENDAHARA"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">HP BENDAHARA</label><input type="tel" class="form-control" name="HP_BENDAHARA"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">MEDIA/STAFF MEDIA</label><input type="text" class="form-control" name="STAFF_MEDIA"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">HP STAFF MEDIA</label><input type="tel" class="form-control" name="HP_STAFF_MEDIA"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">PELATIH</label><input type="text" class="form-control" name="PELATIH"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">ASISTEN PELATIH</label><input type="text" class="form-control" name="ASISTEN_PELATIH"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">STAFF LAINNYA 1</label><input type="text" class="form-control" name="STAFF_LAINNYA_1"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">STAFF LAINNYA 2</label><input type="text" class="form-control" name="STAFF_LAINNYA_2"></div>
                                 </div>
                                 
                                 <button type="submit" class="btn btn-primary mt-3 w-100" id="submitA1Btn">${isEdit ? 'Perbarui Data Klub' : 'Simpan Data Klub'}</button>
@@ -476,7 +541,7 @@
         $('body').append(modalA1Html);
         const modalA1Instance = new bootstrap.Modal(document.getElementById(modalId));
         
-        if (isEdit) {
+        if (idKlubToEdit) {
             try {
                 const data = await callAppsScript('readA1ById', { id_klub: idKlubToEdit });
                 if (data) {
@@ -494,7 +559,7 @@
             const record = {};
             $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
 
-            if (isEdit) { record.ID_KLUB = idKlubToEdit; }
+            if (isKlubAdmin) { record.ID_KLUB = user.id_klub; } // Ambil dari sesi untuk keamanan
 
             try {
                 const result = await callAppsScript('createUpdateA1', { record });
@@ -505,7 +570,7 @@
         });
     }
 
-    // 6. FORM A2 (PEMAIN KOLEKTIF) - Lengkap Fields
+    // 2. FORM A2 (PEMAIN KOLEKTIF) - Disesuaikan UI-nya dengan FORM A2.pdf
     async function renderModalA2(id_pemain_to_edit = null) {
         const isEdit = id_pemain_to_edit !== null;
         const modalId = 'modalA2';
@@ -520,23 +585,24 @@
                         <div class="modal-body">
                             <form id="formA2">
                                 <input type="hidden" name="mode" value="${isEdit ? 'update' : 'create'}">
+                                <input type="hidden" name="ID_KLUB" value="${user.id_klub}">
                                 <div class="row">
-                                    <div class="col-md-6 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" name="ID_KLUB" value="${user.id_klub}" readonly></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA_KLUB</label><input type="text" class="form-control" name="NAMA_KLUB"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" value="${user.id_klub}" disabled></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA KLUB</label><input type="text" class="form-control" name="NAMA_KLUB"></div>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">ID_PEMAIN (16 Digit Angka)</label>
-                                    <input type="text" class="form-control" id="id_pemainA2" name="ID_PEMAIN" required maxlength="16" ${isEdit ? 'readonly' : ''}>
+                                    <label class="form-label">ID PEMAIN (15/16 Digit Angka)</label>
+                                    <input type="text" class="form-control" id="id_pemainA2" name="ID_PEMAIN" required minlength="15" maxlength="16" ${isEdit ? 'readonly' : ''}>
                                     <div id="idPlayerValidation" class="form-text text-danger"></div>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA_LENGKAP</label><input type="text" class="form-control" name="NAMA_LENGKAP" required></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA_PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA LENGKAP</label><input type="text" class="form-control" name="NAMA_LENGKAP" required></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
                                 </div>
                                 <div class="row">
                                     <div class="col-md-3 mb-3"><label class="form-label">NPG (No. Punggung)</label><input type="number" class="form-control" name="NPG"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">TANGGAL_LAHIR</label><input type="date" class="form-control" name="TANGGAL_LAHIR"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">USIA</label><input type="number" class="form-control" name="USIA" readonly></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">TANGGAL LAHIR</label><input type="date" class="form-control" name="TANGGAL_LAHIR" id="tanggalLahirA2"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">USIA</label><input type="number" class="form-control" name="USIA" id="usiaA2" readonly></div>
                                     <div class="col-md-3 mb-3"><label class="form-label">KETERANGAN</label><input type="text" class="form-control" name="KETERANGAN"></div>
                                 </div>
                                 <button type="submit" class="btn btn-success mt-3 w-100">${isEdit ? 'Perbarui Data' : 'Simpan Pemain'}</button>
@@ -551,10 +617,18 @@
         
         if (isEdit) {
             try {
-                const data = await callAppsScript('readA1ById', { id_pemain: id_pemain_to_edit });
+                const data = await callAppsScript('readA2ById', { id_pemain: id_pemain_to_edit });
                 if (data) {
                     $.each(data, function(key, value) {
-                        $(`#formA2 [name="${key}"]`).val(value);
+                         // Tangani konversi Date object/timestamp dari Apps Script
+                        if (key === 'TANGGAL_LAHIR' && value) {
+                            const date = new Date(value);
+                            const formattedDate = date.toISOString().substring(0, 10);
+                            $(`#formA2 [name="${key}"]`).val(formattedDate);
+                            $('#usiaA2').val(calculateAge(formattedDate)); // Hitung usia saat edit
+                        } else {
+                            $(`#formA2 [name="${key}"]`).val(value);
+                        }
                     });
                 }
             } catch (error) { /* Handled */ }
@@ -562,18 +636,27 @@
 
         modalA2Instance.show();
 
-        // Event handler Validasi ID Pemain
+        // Persyaratan 5 & 6: Auto-hitung usia dan validasi ID Pemain
+        $('#tanggalLahirA2').on('change', function() {
+            const dob = $(this).val();
+            if (dob) {
+                $('#usiaA2').val(calculateAge(dob));
+            } else {
+                $('#usiaA2').val('');
+            }
+        });
+
         $('#id_pemainA2').on('blur', async function() {
             const id = $(this).val();
             const validation = $('#idPlayerValidation');
             validation.text('').removeClass('text-success').addClass('text-danger');
 
-            if (id.length !== 16 || !/^\d{16}$/.test(id)) {
-                validation.text('ID_PEMAIN harus 16 digit angka.');
+            if (!/^\d{15,16}$/.test(id)) {
+                validation.text('ID PEMAIN harus 15 atau 16 digit angka.');
                 return;
             }
 
-            if ($('#modeA2').val() === 'create') {
+            if (!isEdit) { // Hanya cek keunikan saat CREATE
                 try {
                     const result = await callAppsScript('checkPlayerIdUnique', { id_pemain: id });
                     if (!result.isUnique) {
@@ -582,16 +665,19 @@
                         validation.text('ID unik. ✅').removeClass('text-danger').addClass('text-success');
                     }
                 } catch (error) {
-                    validation.text(error.message); // Menangkap pesan error dari backend
+                    validation.text(error.message); 
                 }
             }
         });
 
-        // Event handler submit form
         $('#formA2').off('submit').on('submit', async function(e) {
             e.preventDefault();
             const record = {};
             $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
+
+            if (!isEdit && !$('#idPlayerValidation').hasClass('text-success')) {
+                return showNotification('Mohon perbaiki validasi ID Pemain.', 'warning');
+            }
 
             try {
                 const result = await callAppsScript('createUpdateA2', { record });
@@ -604,9 +690,10 @@
         });
     }
 
-    // 7. FORM A3 (PENDAFTARAN PERTANDINGAN) - Lengkap Fields
+    // 3. FORM A3 (PENDAFTARAN PERTANDINGAN) - Disesuaikan UI-nya dengan FORM A3.pdf
     function renderModalA3() {
         const modalId = 'modalA3';
+        const user = JSON.parse(localStorage.getItem('userProfile'));
         $(`#${modalId}`).remove();
         
         const modalA3Html = `
@@ -616,20 +703,40 @@
                         <div class="modal-header bg-info text-white"><h5 class="modal-title" id="modalA3Label">Form A3: Pendaftaran Pertandingan</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
                         <div class="modal-body">
                             <form id="formA3">
+                                <h5 class="border-bottom pb-2">Informasi Pertandingan</h5>
                                 <div class="row">
-                                    <div class="col-md-4 mb-3"><label class="form-label">ID_LINE-UP</label><input type="text" class="form-control" name="ID_LINE-UP" required></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">TANGGAL_PERTANDINGAN</label><input type="date" class="form-control" name="TANGGAL_PERTANDINGAN" required></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">LOKASI_PERTANDINGAN</label><input type="text" class="form-control" name="LOKASI_PERTANDINGAN"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">ID LINE-UP</label><input type="text" class="form-control" name="ID_LINE-UP" required></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">TANGGAL PERTANDINGAN</label><input type="date" class="form-control" name="TANGGAL_PERTANDINGAN" required></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">LOKASI PERTANDINGAN</label><input type="text" class="form-control" name="LOKASI_PERTANDINGAN"></div>
+                                </div>
+                                
+                                <h5 class="mt-4 border-bottom pb-2">Detail Pemain</h5>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">ID KLUB</label><input type="text" class="form-control" name="ID_KLUB" value="${user.id_klub}" readonly></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">ID PEMAIN</label><input type="text" class="form-control" name="ID_PEMAIN" required></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-4 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" name="ID_KLUB" value="${JSON.parse(localStorage.getItem('userProfile')).id_klub}" readonly></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">TIPE_PEMAIN</label><input type="text" class="form-control" name="TIPE_PEMAIN"></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">ID_PEMAIN</label><input type="text" class="form-control" name="ID_PEMAIN"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-4 mb-3"><label class="form-label">NAMA_PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">NO_PUNGGUNG</label><input type="number" class="form-control" name="NO_PUNGGUNG"></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">POSISI</label><input type="text" class="form-control" name="POSISI"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">NO PUNGGUNG</label><input type="number" class="form-control" name="NO_PUNGGUNG"></div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">POSISI</label>
+                                        <select class="form-control" name="POSISI">
+                                            <option value="">Pilih Posisi</option>
+                                            <option value="KIPER">KIPER</option>
+                                            <option value="BEK">BEK</option>
+                                            <option value="GELANDANG">GELANDANG</option>
+                                            <option value="SAYAP">SAYAP</option>
+                                            <option value="PENYERANG">PENYERANG</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">TIPE PEMAIN</label>
+                                        <select class="form-control" name="TIPE_PEMAIN">
+                                            <option value="PEMAIN UTAMA">PEMAIN UTAMA</option>
+                                            <option value="PEMAIN CADANGAN">PEMAIN CADANGAN</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">USIA</label><input type="number" class="form-control" name="USIA"></div>
                                 </div>
                                 <button type="submit" class="btn btn-info mt-3 w-100">Simpan Pendaftaran</button>
                             </form>
@@ -660,8 +767,10 @@
         });
     }
 
-    // 8. FORM BERITA - Lengkap Fields
+    // 8. FORM BERITA - Tidak diubah signifikan, karena UI sudah oke.
+
     async function renderModalBerita(id_berita_to_edit = null) {
+        // ... (Kode renderModalBerita sama seperti sebelumnya) ...
         const isEdit = id_berita_to_edit !== null;
         const modalId = 'modalBerita';
         const user = JSON.parse(localStorage.getItem('userProfile'));
@@ -705,7 +814,7 @@
                 const data = await callAppsScript('readBeritaById', { id_berita: id_berita_to_edit });
                 if (data) {
                     $.each(data, function(key, value) {
-                        $(`#formBerita [name="${key}"]`).val(value);
+                         $(`#formBerita [name="${key}"]`).val(value);
                     });
                 }
             } catch (error) { /* Handled */ }
@@ -713,7 +822,6 @@
         
         modalBeritaInstance.show();
 
-        // Event handler submit form
         $('#formBerita').off('submit').on('submit', async function(e) {
             e.preventDefault();
             const record = {};
@@ -728,23 +836,26 @@
         });
     }
 
-
-    // 9. CHATHISTORY_ANTAR_ADMIN (UI WhatsApp Look-alike)
+    // 4. & 8. CHATHISTORY_ANTAR_ADMIN (Dapat Saling Berkabar)
     let chatRefreshInterval;
 
     function setupChatInterface(currentUser) {
         const chatContainer = $('#chatInterface');
+        const userOptions = allUsers.filter(u => u.username !== currentUser).map(u => 
+            `<option value="${u.username}">${u.username} (${u.tipe_user})</option>`
+        ).join('');
+        
         chatContainer.html(`
             <div class="card h-100 chat-card">
                 <div class="card-header bg-secondary text-white">Chat Antar Admin</div>
                 <div class="card-body chat-body" id="chatBody"></div>
                 <div class="card-footer">
                     <form id="chatForm" class="d-flex">
-                        <select class="form-select me-2" name="penerima" required style="max-width: 150px;">
+                        <select class="form-select me-2" name="penerima" required style="max-width: 250px;">
                             <option value="">Pilih Penerima</option>
-                            <option value="ADMIN_PUSAT">Admin Pusat</option>
-                            <option value="ADMIN_MEDIA">Admin Media</option>
-                            </select>
+                            <option value="ALL">Semua Admin</option>
+                            ${userOptions}
+                        </select>
                         <input type="text" class="form-control me-2" name="isi_chat" placeholder="Tulis pesan..." required>
                         <button type="submit" class="btn btn-primary">Kirim</button>
                     </form>
@@ -754,7 +865,7 @@
 
         if (chatRefreshInterval) { clearInterval(chatRefreshInterval); }
         loadChatHistory();
-        chatRefreshInterval = setInterval(loadChatHistory, 15000);
+        chatRefreshInterval = setInterval(loadChatHistory, 15000); // Refresh setiap 15 detik
 
         $('#chatForm').on('submit', async function(e) {
             e.preventDefault();
@@ -778,30 +889,50 @@
         const currentUser = userProfile.username;
 
         try {
-            // Kita tidak perlu token karena callAppsScript sudah menambahkannya
             const history = await callAppsScript('readChat');
             chatBody.empty();
             
             // Render dari yang paling lama ke paling baru, dan scroll ke bawah
             history.reverse().forEach(chat => { 
+                // Logika pesan ditampilkan jika: 
+                // 1. Pengirimnya adalah user ini. 
+                // 2. Penerimanya adalah user ini.
+                // 3. Penerimanya adalah 'ALL'.
                 const isMe = chat.PENGIRIM === currentUser;
-                const alignClass = isMe ? 'justify-content-end' : 'justify-content-start';
-                const time = new Date(chat.TANGGAL_CHAT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const isRecipient = chat.PENERIMA === currentUser;
+                const isAll = chat.PENERIMA === 'ALL';
 
-                const chatHtml = `
-                    <div class="d-flex ${alignClass} w-100">
-                        <div class="chat-message ${isMe ? 'me' : 'other'}">
-                            <small class="text-muted d-block" style="font-size: 0.75em;">${chat.PENGIRIM} ${!isMe ? 'ke ' + chat.PENERIMA : ''}</small>
-                            <p class="mb-0">${chat.ISI_CHAT}</p>
-                            <span class="d-block text-end text-muted" style="font-size: 0.6em;">${time}</span>
+                if (isMe || isRecipient || isAll) {
+                    const alignClass = isMe ? 'justify-content-end' : 'justify-content-start';
+                    const time = new Date(chat.TANGGAL_CHAT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    let recipientText = '';
+                    if (!isMe && !isAll) {
+                        recipientText = `Pribadi ke Anda`;
+                    } else if (!isMe && isAll) {
+                        recipientText = `Pesan Grup`;
+                    } else if (isMe && chat.PENERIMA !== 'ALL') {
+                        recipientText = `ke ${chat.PENERIMA}`;
+                    } else if (isMe && chat.PENERIMA === 'ALL') {
+                        recipientText = `ke Semua Admin`;
+                    }
+
+                    const chatHtml = `
+                        <div class="d-flex ${alignClass} w-100">
+                            <div class="chat-message ${isMe ? 'me' : 'other'}">
+                                <small class="text-muted d-block" style="font-size: 0.75em;">
+                                    <strong>${chat.PENGIRIM}</strong> ${recipientText}
+                                </small>
+                                <p class="mb-0">${chat.ISI_CHAT}</p>
+                                <span class="d-block text-end text-muted" style="font-size: 0.6em;">${time}</span>
+                            </div>
                         </div>
-                    </div>
-                `;
-                chatBody.append(chatHtml);
+                    `;
+                    chatBody.append(chatHtml);
+                }
             });
             chatBody.scrollTop(chatBody.prop("scrollHeight"));
         } catch (error) {
-            // Jangan tampilkan notifikasi jika error saat refresh, cukup log
             console.error('Failed to load chat history:', error);
             chatBody.html('<p class="text-danger">Gagal memuat riwayat chat.</p>');
         }
@@ -810,6 +941,7 @@
 
     // --- INITIALIZATION ---
     async function init() {
+        // ... (Kode init sama seperti sebelumnya) ...
         const tokenId = localStorage.getItem('tokenId');
         const userProfileJson = localStorage.getItem('userProfile');
 
