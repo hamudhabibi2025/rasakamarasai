@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Aplikasi PSSI Mentawai</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* CSS Kustom */
+        body { background-color: #f8f9fa; }
+
+        /* Persyaratan 1: Notifikasi Melayang (1/3 atas tengah) */
+        .floating-notification {
+            position: fixed;
+            top: 33%; /* sepertiga atas */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1050;
+            min-width: 300px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Persyaratan 2, 5-9: Modal Dialog (1/3 atas tengah) */
+        .modal-dialog-centered-top {
+            display: flex;
+            align-items: flex-start;
+            min-height: calc(100% - 1rem);
+            padding-top: 10vh; /* Sesuaikan padding untuk sepertiga atas */
+        }
+
+        /* CSS Chat Interface (Persyaratan 9) */
+        .chat-card { height: 70vh !important; }
+        .chat-body { 
+            height: 100% !important; 
+            overflow-y: scroll;
+            display: flex;
+            flex-direction: column-reverse; /* Tampilkan chat terbaru di bawah (scroll ke bawah) */
+        }
+        .chat-message { max-width: 75%; padding: 8px; border-radius: 10px; margin-bottom: 5px; }
+        .chat-message.me { background-color: #DCF8C6; align-self: flex-end; } /* Hijau Muda, kanan */
+        .chat-message.other { background-color: #FFFFFF; align-self: flex-start; } /* Putih/Terang, kiri */
+    </style>
+</head>
+<body>
+
+<div id="app" class="container mt-5">
+    </div>
+
+<div id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 2000; display: none; justify-content: center; align-items: center;">
+    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+</div>
+
+<div id="notificationContainer"></div>
+
+<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered-top">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmationModalLabel">Konfirmasi Aksi</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="confirmationModalBody">
+                Yakin ingin melanjutkan aksi ini?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-danger" id="confirmActionButton">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // =======================================================
+    // !!! GANTI DENGAN URL DEPLOYMENT APPS SCRIPT ANDA !!!
+    // =======================================================
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzz3iH0IcwSQG0BFrvzebJbPtkiru-zKff32B_Oz1AgnUBuZQ2--nWRzh3BvTvTbkzk/exec';
+    
+    // --- UTILITY FUNCTIONS ---
+    function showLoading(show) { $('#loadingOverlay').css('display', show ? 'flex' : 'none'); }
+    
+    // Persyaratan 1: Notifikasi Melayang
+    function showNotification(message, type = 'success') {
+        const alertClass = `alert-${type}`;
+        const html = `
+            <div class="alert ${alertClass} floating-notification alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        $('#notificationContainer').html(html);
+        setTimeout(() => { $('.floating-notification').alert('close'); }, 5000);
+    }
+
+    // Persyaratan 2: Konfirmasi Modal Dialog
+    function showConfirmation(message, callback) {
+        $('#confirmationModalBody').text(message);
+        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+        $('#confirmActionButton').off('click').on('click', function() {
+            confirmationModal.hide();
+            callback();
+        });
+        confirmationModal.show();
+    }
+
+    // API CALL FUNCTION
+    async function callAppsScript(action, data = {}) {
+        showLoading(true);
+        const tokenId = localStorage.getItem('tokenId');
+        if (tokenId) { data.token_id = tokenId; }
+
+        try {
+            const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, ...data })
+            });
+
+            if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+
+            const result = await response.json();
+            showLoading(false);
+
+            if (result.success) {
+                return result.data;
+            } else if (result.message.includes('Sesi tidak valid')) {
+                showNotification(result.message, 'warning');
+                localStorage.removeItem('tokenId');
+                localStorage.removeItem('userProfile');
+                renderLogin();
+                throw new Error(result.message);
+            } else {
+                throw new Error(result.message || 'Operasi gagal.');
+            }
+        } catch (error) {
+            showLoading(false);
+            showNotification(`Error: ${error.message}`, 'danger');
+            console.error('Apps Script Call Error:', error);
+            throw error;
+        }
+    }
+    
+    // --- VIEW FUNCTIONS ---
+    
+    function renderLogin() {
+        const html = `
+            <div class="row justify-content-center">
+                <div class="col-md-6 col-lg-4">
+                    <div class="card shadow-lg mt-5">
+                        <div class="card-header bg-primary text-white text-center">
+                            <h4>Login PSSI Mentawai</h4>
+                        </div>
+                        <div class="card-body">
+                            <form id="loginForm">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">Username</label>
+                                    <input type="text" class="form-control" id="username" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Password</label>
+                                    <input type="password" class="form-control" id="password" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Login</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#app').html(html);
+
+        $('#loginForm').on('submit', async function(e) {
+            e.preventDefault();
+            const username = $('#username').val();
+            const password = $('#password').val();
+
+            try {
+                const result = await callAppsScript('login', { username, password });
+                localStorage.setItem('tokenId', result.token_id);
+                localStorage.setItem('userProfile', JSON.stringify(result.user));
+                showNotification(`Selamat datang, ${result.user.username}!`, 'success');
+                renderDashboard(result.user);
+            } catch (error) {
+                // Error ditangani oleh callAppsScript
+            }
+        });
+    }
+
+    async function handleLogout() {
+        const tokenId = localStorage.getItem('tokenId');
+        try {
+            await callAppsScript('logout', { token_id: tokenId });
+        } catch (error) {
+            console.error("Logout error:", error);
+        } finally {
+            localStorage.removeItem('tokenId');
+            localStorage.removeItem('userProfile');
+            showNotification('Anda berhasil logout.', 'info');
+            renderLogin();
+            if (window.chatRefreshInterval) { clearInterval(window.chatRefreshInterval); } // Hentikan refresh chat
+        }
+    }
+
+    function renderDashboard(user) {
+        const tabItems = [
+            { id: 'a1', name: 'FORM A1 (Data Klub)' },
+            { id: 'a2', name: 'FORM A2 (Pemain Kolektif)' },
+            { id: 'a3', name: 'FORM A3 (Pendaftaran Pertandingan)' },
+            { id: 'berita', name: 'BERITA PSSI MENTAWAI' },
+            { id: 'chat', name: 'CHATHISTORY ANTAR ADMIN' }
+        ];
+
+        const navHtml = `
+            <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+                <div class="container-fluid">
+                    <a class="navbar-brand" href="#">PSSI Mentawai - ${user.tipe_user}</a>
+                    <div class="d-flex">
+                        <span class="navbar-text text-white me-3">
+                            Login sebagai: <strong>${user.username}</strong>
+                        </span>
+                        <button class="btn btn-outline-light" id="logoutBtn">Logout</button>
+                    </div>
+                </div>
+            </nav>
+        `;
+
+        const tabNavHtml = `
+            <ul class="nav nav-tabs mt-3" id="myTab" role="tablist">
+                ${tabItems.map((item, index) => `
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link ${index === 0 ? 'active' : ''}" id="${item.id}-tab" data-bs-toggle="tab" data-bs-target="#${item.id}-content" type="button" role="tab" aria-controls="${item.id}-content" aria-selected="${index === 0 ? 'true' : 'false'}">
+                            ${item.name}
+                        </button>
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+
+        const contentHtml = tabItems.map((item, index) => `
+            <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" id="${item.id}-content" role="tabpanel" aria-labelledby="${item.id}-tab">
+                <h3 class="mt-3">${item.name}</h3>
+                <div id="content-${item.id}">
+                    ${item.id === 'a1' ? '<button class="btn btn-success my-2" id="openA1Modal">Tambah Data Klub</button><div id="dataA1"></div>' : ''}
+                    ${item.id === 'a2' ? '<button class="btn btn-success my-2" id="openA2Modal">Tambah Pemain Kolektif</button><div id="dataA2"></div>' : ''}
+                    ${item.id === 'a3' ? '<button class="btn btn-success my-2" id="openA3Modal">Input Pendaftaran Pertandingan</button><div id="dataA3"></div>' : ''}
+                    ${item.id === 'berita' ? '<button class="btn btn-warning my-2" id="openBeritaModal">Tulis Berita Baru</button><div id="dataBerita"></div>' : ''}
+                    ${item.id === 'chat' ? '<div id="chatInterface" class="chat-card"></div>' : ''}
+                </div>
+            </div>
+        `).join('');
+
+        const html = `
+            ${navHtml}
+            <div class="container mt-3">
+                ${tabNavHtml}
+                <div class="tab-content" id="myTabContent">
+                    ${contentHtml}
+                </div>
+            </div>
+        `;
+        
+        $('#app').html(html);
+
+        $('#logoutBtn').on('click', function() { showConfirmation('Anda yakin ingin logout?', handleLogout); });
+        
+        // Panggil Loaders
+        loadDataA1();
+        loadDataA2();
+        loadDataA3();
+        loadDataBerita();
+        setupChatInterface(user.username);
+        
+        // Event listeners untuk Modal
+        $('#openA1Modal').on('click', () => renderModalA1());
+        $('#openA2Modal').on('click', () => renderModalA2());
+        $('#openA3Modal').on('click', () => renderModalA3());
+        $('#openBeritaModal').on('click', () => renderModalBerita());
+    }
+
+    // --- CRUD/DATA FUNCTIONS (READERS) ---
+    async function loadDataA1() {
+        const tokenId = localStorage.getItem('tokenId');
+        try {
+            const data = await callAppsScript('readA1', { token_id: tokenId });
+            // Simplified table rendering...
+            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_KLUB</th><th>NAMA_RESMI_KLUB</th><th>MANAJER</th><th>HP_MANAJER</th><th>Aksi</th></tr></thead><tbody>';
+            if (data.length > 0) {
+                data.forEach(row => {
+                    tableHtml += `<tr>
+                        <td>${row.ID_KLUB}</td>
+                        <td>${row.NAMA_RESMI_KLUB}</td>
+                        <td>${row.MANAJER}</td>
+                        <td>${row.HP_MANAJER}</td>
+                        <td><button class="btn btn-sm btn-info edit-a1" data-id="${row.ID_KLUB}">Edit</button></td>
+                    </tr>`;
+                });
+                tableHtml += '</tbody></table>';
+            } else { tableHtml = '<p>Tidak ada data klub (FORM A1).</p>'; }
+            
+            $('#dataA1').html(tableHtml);
+            
+            $('.edit-a1').on('click', function() { renderModalA1($(this).data('id')); });
+        } catch (error) { $('#dataA1').html('<p class="text-danger">Gagal memuat data FORM A1.</p>'); }
+    }
+
+    async function loadDataA2() {
+        const tokenId = localStorage.getItem('tokenId');
+        try {
+            const data = await callAppsScript('readA2', { token_id: tokenId });
+            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_PEMAIN</th><th>NAMA_LENGKAP</th><th>NPG</th><th>TANGGAL_LAHIR</th><th>Aksi</th></tr></thead><tbody>';
+            if (data.length > 0) {
+                data.forEach(row => {
+                    tableHtml += `<tr>
+                        <td>${row.ID_PEMAIN}</td>
+                        <td>${row.NAMA_LENGKAP}</td>
+                        <td>${row.NPG}</td>
+                        <td>${row.TANGGAL_LAHIR}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info edit-a2" data-id="${row.ID_PEMAIN}">Edit</button>
+                            <button class="btn btn-sm btn-danger delete-a2" data-id="${row.ID_PEMAIN}">Hapus</button>
+                        </td>
+                    </tr>`;
+                });
+                tableHtml += '</tbody></table>';
+            } else { tableHtml = '<p>Tidak ada data pemain (FORM A2).</p>'; }
+            
+            $('#dataA2').html(tableHtml);
+
+            $('.edit-a2').on('click', function() { renderModalA2($(this).data('id')); });
+            $('.delete-a2').on('click', function() {
+                const id = $(this).data('id');
+                showConfirmation(`Yakin ingin menghapus pemain ID ${id}?`, () => handleDeleteA2(id));
+            });
+        } catch (error) { $('#dataA2').html('<p class="text-danger">Gagal memuat data FORM A2.</p>'); }
+    }
+
+    async function handleDeleteA2(id_pemain) {
+        try {
+            const result = await callAppsScript('deleteA2', { id_pemain });
+            showNotification(`Pemain ID ${result.id} berhasil dihapus.`, 'success');
+            loadDataA2();
+        } catch (error) { /* Handled in callAppsScript */ }
+    }
+
+    async function loadDataA3() {
+        const tokenId = localStorage.getItem('tokenId');
+        try {
+            const data = await callAppsScript('readA3', { token_id: tokenId });
+            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_LINE-UP</th><th>TANGGAL</th><th>ID_KLUB</th><th>POSISI</th></tr></thead><tbody>';
+            if (data.length > 0) {
+                data.forEach(row => {
+                    tableHtml += `<tr>
+                        <td>${row['ID_LINE-UP']}</td>
+                        <td>${row.TANGGAL_PERTANDINGAN}</td>
+                        <td>${row.ID_KLUB}</td>
+                        <td>${row.POSISI}</td>
+                    </tr>`;
+                });
+                tableHtml += '</tbody></table>';
+            } else { tableHtml = '<p>Belum ada pendaftaran pertandingan (FORM A3).</p>'; }
+            $('#dataA3').html(tableHtml);
+        } catch (error) { $('#dataA3').html('<p class="text-danger">Gagal memuat data FORM A3.</p>'); }
+    }
+
+    async function loadDataBerita() {
+        try {
+            const data = await callAppsScript('readBerita');
+            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_BERITA</th><th>TANGGAL</th><th>JUDUL_BERITA</th><th>PENULIS</th><th>Aksi</th></tr></thead><tbody>';
+            if (data.length > 0) {
+                data.forEach(row => {
+                    tableHtml += `<tr>
+                        <td>${row.ID_BERITA}</td>
+                        <td>${row.TANGGAL}</td>
+                        <td>${row.JUDUL_BERITA}</td>
+                        <td>${row.PENULIS}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info view-berita" data-id="${row.ID_BERITA}">Lihat/Edit</button>
+                            <button class="btn btn-sm btn-danger delete-berita" data-id="${row.ID_BERITA}">Hapus</button>
+                        </td>
+                    </tr>`;
+                });
+                tableHtml += '</tbody></table>';
+            } else { tableHtml = '<p>Tidak ada berita.</p>'; }
+            
+            $('#dataBerita').html(tableHtml);
+
+            $('.view-berita').on('click', function() { renderModalBerita($(this).data('id')); });
+            $('.delete-berita').on('click', function() {
+                const id = $(this).data('id');
+                showConfirmation(`Yakin ingin menghapus berita ID ${id}?`, () => handleDeleteBerita(id));
+            });
+        } catch (error) { $('#dataBerita').html('<p class="text-danger">Gagal memuat data Berita.</p>'); }
+    }
+
+    async function handleDeleteBerita(id_berita) {
+        try {
+            const result = await callAppsScript('deleteBerita', { id_berita });
+            showNotification(`Berita ID ${result.id} berhasil dihapus.`, 'success');
+            loadDataBerita();
+        } catch (error) { /* Handled in callAppsScript */ }
+    }
+
+    // --- MODAL RENDERING (LENGKAP SEMUA FIELDS) ---
+
+    // 5. FORM A1 (DATA KLUB) - Lengkap Fields
+    async function renderModalA1(idKlubToEdit = null) {
+        const isEdit = idKlubToEdit !== null;
+        const modalId = 'modalA1';
+        $(`#${modalId}`).remove(); // Hapus modal lama
+        
+        const modalA1Html = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA1Label" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered-top modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header bg-primary text-white"><h5 class="modal-title" id="modalA1Label">${isEdit ? 'Edit' : 'Tambah'} Data Klub (A1)</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body">
+                            <form id="formA1">
+                                <input type="hidden" id="modeA1" value="${isEdit ? 'update' : 'create'}">
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" name="ID_KLUB" id="idKlubA1" required ${isEdit ? 'readonly' : ''}></div>
+                                    <div class="col-md-9 mb-3"><label class="form-label">NAMA_RESMI_KLUB</label><input type="text" class="form-control" name="NAMA_RESMI_KLUB" required></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label class="form-label">JULUKAN_KLUB</label><input type="text" class="form-control" name="JULUKAN_KLUB"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">TANGGAL_BERDIRI</label><input type="date" class="form-control" name="TANGGAL_BERDIRI"></div>
+                                </div>
+                                
+                                <h6 class="mt-4 border-bottom pb-2">Alamat & Kontak Klub</h6>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">ALAMAT</label><input type="text" class="form-control" name="ALAMAT"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">DESA</label><input type="text" class="form-control" name="DESA"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">KECAMATAN</label><input type="text" class="form-control" name="KECAMATAN"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">PROVINSI</label><input type="text" class="form-control" name="PROVINSI"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label class="form-label">NO_HANDPHONE</label><input type="tel" class="form-control" name="NO_HANDPHONE"></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">EMAIL</label><input type="email" class="form-control" name="EMAIL"></div>
+                                </div>
+
+                                <h6 class="mt-4 border-bottom pb-2">Manajemen & Staf</h6>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">MANAJER</label><input type="text" class="form-control" name="MANAJER"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">HP_MANAJER</label><input type="tel" class="form-control" name="HP_MANAJER"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">ASISTEN_MANAJER</label><input type="text" class="form-control" name="ASISTEN_MANAJER"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">HP_ASISTEN_MANAJER</label><input type="tel" class="form-control" name="HP_ASISTEN_MANAJER"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">SEKRETARIS</label><input type="text" class="form-control" name="SEKRETARIS"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">HP_SEKRETARIS</label><input type="tel" class="form-control" name="HP_SEKRETARIS"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">BENDAHARA</label><input type="text" class="form-control" name="BENDAHARA"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">HP_BENDAHARA</label><input type="tel" class="form-control" name="HP_BENDAHARA"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">STAFF_MEDIA</label><input type="text" class="form-control" name="STAFF_MEDIA"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">HP_STAFF_MEDIA</label><input type="tel" class="form-control" name="HP_STAFF_MEDIA"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">PELATIH</label><input type="text" class="form-control" name="PELATIH"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">ASISTEN_PELATIH</label><input type="text" class="form-control" name="ASISTEN_PELATIH"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">STAFF_LAINNYA_1</label><input type="text" class="form-control" name="STAFF_LAINNYA_1"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">STAFF_LAINNYA_2</label><input type="text" class="form-control" name="STAFF_LAINNYA_2"></div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary mt-3 w-100" id="submitA1Btn">${isEdit ? 'Perbarui Data Klub' : 'Simpan Data Klub'}</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $('body').append(modalA1Html);
+        const modalA1Instance = new bootstrap.Modal(document.getElementById(modalId));
+        
+        if (isEdit) {
+            try {
+                const data = await callAppsScript('readA1ById', { id_klub: idKlubToEdit });
+                if (data) {
+                    $.each(data, function(key, value) {
+                        $(`#formA1 [name="${key}"]`).val(value);
+                    });
+                }
+            } catch (error) { /* Handled */ }
+        }
+        
+        modalA1Instance.show();
+
+        $('#formA1').off('submit').on('submit', async function(e) {
+            e.preventDefault();
+            const record = {};
+            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
+
+            if (isEdit) { record.ID_KLUB = idKlubToEdit; }
+
+            try {
+                const result = await callAppsScript('createUpdateA1', { record });
+                showNotification(`Data Klub ID ${result.id} berhasil di${result.action === 'created' ? 'simpan' : 'perbarui'}!`, 'success');
+                modalA1Instance.hide();
+                loadDataA1();
+            } catch (error) { /* Handled */ }
+        });
+    }
+
+    // 6. FORM A2 (PEMAIN KOLEKTIF) - Lengkap Fields
+    async function renderModalA2(id_pemain_to_edit = null) {
+        const isEdit = id_pemain_to_edit !== null;
+        const modalId = 'modalA2';
+        const user = JSON.parse(localStorage.getItem('userProfile'));
+        $(`#${modalId}`).remove();
+        
+        const modalA2Html = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA2Label" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered-top modal-md">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white"><h5 class="modal-title" id="modalA2Label">${isEdit ? 'Edit' : 'Tambah'} Pemain Kolektif (A2)</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body">
+                            <form id="formA2">
+                                <input type="hidden" name="mode" value="${isEdit ? 'update' : 'create'}">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" name="ID_KLUB" value="${user.id_klub}" readonly></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA_KLUB</label><input type="text" class="form-control" name="NAMA_KLUB"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">ID_PEMAIN (16 Digit Angka)</label>
+                                    <input type="text" class="form-control" id="id_pemainA2" name="ID_PEMAIN" required maxlength="16" ${isEdit ? 'readonly' : ''}>
+                                    <div id="idPlayerValidation" class="form-text text-danger"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA_LENGKAP</label><input type="text" class="form-control" name="NAMA_LENGKAP" required></div>
+                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA_PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3 mb-3"><label class="form-label">NPG (No. Punggung)</label><input type="number" class="form-control" name="NPG"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">TANGGAL_LAHIR</label><input type="date" class="form-control" name="TANGGAL_LAHIR"></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">USIA</label><input type="number" class="form-control" name="USIA" readonly></div>
+                                    <div class="col-md-3 mb-3"><label class="form-label">KETERANGAN</label><input type="text" class="form-control" name="KETERANGAN"></div>
+                                </div>
+                                <button type="submit" class="btn btn-success mt-3 w-100">${isEdit ? 'Perbarui Data' : 'Simpan Pemain'}</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('body').append(modalA2Html);
+        const modalA2Instance = new bootstrap.Modal(document.getElementById(modalId));
+        
+        if (isEdit) {
+            try {
+                const data = await callAppsScript('readA1ById', { id_pemain: id_pemain_to_edit });
+                if (data) {
+                    $.each(data, function(key, value) {
+                        $(`#formA2 [name="${key}"]`).val(value);
+                    });
+                }
+            } catch (error) { /* Handled */ }
+        }
+
+        modalA2Instance.show();
+
+        // Event handler Validasi ID Pemain
+        $('#id_pemainA2').on('blur', async function() {
+            const id = $(this).val();
+            const validation = $('#idPlayerValidation');
+            validation.text('').removeClass('text-success').addClass('text-danger');
+
+            if (id.length !== 16 || !/^\d{16}$/.test(id)) {
+                validation.text('ID_PEMAIN harus 16 digit angka.');
+                return;
+            }
+
+            if ($('#modeA2').val() === 'create') {
+                try {
+                    const result = await callAppsScript('checkPlayerIdUnique', { id_pemain: id });
+                    if (!result.isUnique) {
+                        validation.text(result.message);
+                    } else {
+                        validation.text('ID unik. ✅').removeClass('text-danger').addClass('text-success');
+                    }
+                } catch (error) {
+                    validation.text(error.message); // Menangkap pesan error dari backend
+                }
+            }
+        });
+
+        // Event handler submit form
+        $('#formA2').off('submit').on('submit', async function(e) {
+            e.preventDefault();
+            const record = {};
+            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
+
+            try {
+                const result = await callAppsScript('createUpdateA2', { record });
+                showNotification(`Pemain ID ${result.id} berhasil di${result.action === 'created' ? 'simpan' : 'perbarui'}!`, 'success');
+                modalA2Instance.hide();
+                loadDataA2(); 
+            } catch (error) {
+                 showNotification(`Gagal menyimpan data A2: ${error.message}`, 'danger');
+            }
+        });
+    }
+
+    // 7. FORM A3 (PENDAFTARAN PERTANDINGAN) - Lengkap Fields
+    function renderModalA3() {
+        const modalId = 'modalA3';
+        $(`#${modalId}`).remove();
+        
+        const modalA3Html = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA3Label" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered-top modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-info text-white"><h5 class="modal-title" id="modalA3Label">Form A3: Pendaftaran Pertandingan</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body">
+                            <form id="formA3">
+                                <div class="row">
+                                    <div class="col-md-4 mb-3"><label class="form-label">ID_LINE-UP</label><input type="text" class="form-control" name="ID_LINE-UP" required></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">TANGGAL_PERTANDINGAN</label><input type="date" class="form-control" name="TANGGAL_PERTANDINGAN" required></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">LOKASI_PERTANDINGAN</label><input type="text" class="form-control" name="LOKASI_PERTANDINGAN"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" name="ID_KLUB" value="${JSON.parse(localStorage.getItem('userProfile')).id_klub}" readonly></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">TIPE_PEMAIN</label><input type="text" class="form-control" name="TIPE_PEMAIN"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">ID_PEMAIN</label><input type="text" class="form-control" name="ID_PEMAIN"></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3"><label class="form-label">NAMA_PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">NO_PUNGGUNG</label><input type="number" class="form-control" name="NO_PUNGGUNG"></div>
+                                    <div class="col-md-4 mb-3"><label class="form-label">POSISI</label><input type="text" class="form-control" name="POSISI"></div>
+                                </div>
+                                <button type="submit" class="btn btn-info mt-3 w-100">Simpan Pendaftaran</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $('body').append(modalA3Html);
+        const modalA3Instance = new bootstrap.Modal(document.getElementById(modalId));
+        modalA3Instance.show();
+
+        // Event handler submit form
+        $('#formA3').off('submit').on('submit', async function(e) {
+            e.preventDefault();
+            const record = {};
+            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
+
+            try {
+                const result = await callAppsScript('createA3', { record });
+                showNotification(`Pendaftaran Pertandingan ID ${result.id} berhasil disimpan!`, 'success');
+                modalA3Instance.hide();
+                loadDataA3();
+            } catch (error) {
+                 showNotification(`Gagal menyimpan data A3: ${error.message}`, 'danger');
+            }
+        });
+    }
+
+    // 8. FORM BERITA - Lengkap Fields
+    async function renderModalBerita(id_berita_to_edit = null) {
+        const isEdit = id_berita_to_edit !== null;
+        const modalId = 'modalBerita';
+        const user = JSON.parse(localStorage.getItem('userProfile'));
+        $(`#${modalId}`).remove();
+
+        const modalBeritaHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalBeritaLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered-top modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning"><h5 class="modal-title" id="modalBeritaLabel">${isEdit ? 'Edit' : 'Buat'} Berita PSSI Mentawai</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                        <div class="modal-body">
+                            <form id="formBerita">
+                                <input type="hidden" name="ID_BERITA" value="${id_berita_to_edit || ''}">
+                                <input type="hidden" name="PENULIS" value="${user.username}">
+                                <input type="hidden" name="TANGGAL" value="">
+
+                                <div class="mb-3">
+                                    <label for="judulBerita" class="form-label">JUDUL_BERITA</label>
+                                    <input type="text" class="form-control" id="judulBerita" name="JUDUL_BERITA" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="isiBerita" class="form-label">ISI_BERITA</label>
+                                    <textarea class="form-control" id="isiBerita" name="ISI_BERITA" rows="10" required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="potoUrl" class="form-label">POTO_URL (Link Gambar)</label>
+                                    <input type="url" class="form-control" id="potoUrl" name="POTO_URL">
+                                </div>
+                                <button type="submit" class="btn btn-warning mt-3 w-100">${isEdit ? 'Perbarui Berita' : 'Publikasikan Berita'}</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('body').append(modalBeritaHtml);
+        const modalBeritaInstance = new bootstrap.Modal(document.getElementById(modalId));
+        
+        if (isEdit) {
+            try {
+                const data = await callAppsScript('readBeritaById', { id_berita: id_berita_to_edit });
+                if (data) {
+                    $.each(data, function(key, value) {
+                        $(`#formBerita [name="${key}"]`).val(value);
+                    });
+                }
+            } catch (error) { /* Handled */ }
+        }
+        
+        modalBeritaInstance.show();
+
+        // Event handler submit form
+        $('#formBerita').off('submit').on('submit', async function(e) {
+            e.preventDefault();
+            const record = {};
+            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
+
+            try {
+                const result = await callAppsScript('createUpdateBerita', { record });
+                showNotification(`Berita ID ${result.id} berhasil di${result.action === 'created' ? 'publikasikan' : 'perbarui'}!`, 'success');
+                modalBeritaInstance.hide();
+                loadDataBerita();
+            } catch (error) { /* Handled */ }
+        });
+    }
+
+
+    // 9. CHATHISTORY_ANTAR_ADMIN (UI WhatsApp Look-alike)
+    let chatRefreshInterval;
+
+    function setupChatInterface(currentUser) {
+        const chatContainer = $('#chatInterface');
+        chatContainer.html(`
+            <div class="card h-100 chat-card">
+                <div class="card-header bg-secondary text-white">Chat Antar Admin</div>
+                <div class="card-body chat-body" id="chatBody"></div>
+                <div class="card-footer">
+                    <form id="chatForm" class="d-flex">
+                        <select class="form-select me-2" name="penerima" required style="max-width: 150px;">
+                            <option value="">Pilih Penerima</option>
+                            <option value="ADMIN_PUSAT">Admin Pusat</option>
+                            <option value="ADMIN_MEDIA">Admin Media</option>
+                            </select>
+                        <input type="text" class="form-control me-2" name="isi_chat" placeholder="Tulis pesan..." required>
+                        <button type="submit" class="btn btn-primary">Kirim</button>
+                    </form>
+                </div>
+            </div>
+        `);
+
+        if (chatRefreshInterval) { clearInterval(chatRefreshInterval); }
+        loadChatHistory();
+        chatRefreshInterval = setInterval(loadChatHistory, 15000);
+
+        $('#chatForm').on('submit', async function(e) {
+            e.preventDefault();
+            const penerima = $(this).find('select[name="penerima"]').val();
+            const isi_chat = $(this).find('input[name="isi_chat"]').val();
+
+            if (!penerima || !isi_chat) { return showNotification('Penerima dan isi chat wajib diisi.', 'warning'); }
+
+            try {
+                await callAppsScript('sendChat', { penerima, isi_chat });
+                $(this).find('input[name="isi_chat"]').val('');
+                loadChatHistory();
+            } catch (error) { showNotification('Gagal mengirim pesan.', 'danger'); }
+        });
+    }
+
+    async function loadChatHistory() {
+        const chatBody = $('#chatBody');
+        const userProfile = JSON.parse(localStorage.getItem('userProfile'));
+        if (!userProfile) return;
+        const currentUser = userProfile.username;
+
+        try {
+            // Kita tidak perlu token karena callAppsScript sudah menambahkannya
+            const history = await callAppsScript('readChat');
+            chatBody.empty();
+            
+            // Render dari yang paling lama ke paling baru, dan scroll ke bawah
+            history.reverse().forEach(chat => { 
+                const isMe = chat.PENGIRIM === currentUser;
+                const alignClass = isMe ? 'justify-content-end' : 'justify-content-start';
+                const time = new Date(chat.TANGGAL_CHAT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                const chatHtml = `
+                    <div class="d-flex ${alignClass} w-100">
+                        <div class="chat-message ${isMe ? 'me' : 'other'}">
+                            <small class="text-muted d-block" style="font-size: 0.75em;">${chat.PENGIRIM} ${!isMe ? 'ke ' + chat.PENERIMA : ''}</small>
+                            <p class="mb-0">${chat.ISI_CHAT}</p>
+                            <span class="d-block text-end text-muted" style="font-size: 0.6em;">${time}</span>
+                        </div>
+                    </div>
+                `;
+                chatBody.append(chatHtml);
+            });
+            chatBody.scrollTop(chatBody.prop("scrollHeight"));
+        } catch (error) {
+            // Jangan tampilkan notifikasi jika error saat refresh, cukup log
+            console.error('Failed to load chat history:', error);
+            chatBody.html('<p class="text-danger">Gagal memuat riwayat chat.</p>');
+        }
+    }
+
+
+    // --- INITIALIZATION ---
+    async function init() {
+        const tokenId = localStorage.getItem('tokenId');
+        const userProfileJson = localStorage.getItem('userProfile');
+
+        if (tokenId && userProfileJson) {
+            try {
+                const sessionCheck = await callAppsScript('checkSession', { token_id: tokenId });
+                
+                if (sessionCheck.isActive) {
+                    renderDashboard(sessionCheck.user);
+                } else {
+                    localStorage.removeItem('tokenId');
+                    localStorage.removeItem('userProfile');
+                    showNotification('Sesi Anda telah berakhir. Silakan login kembali.', 'warning');
+                    renderLogin();
+                }
+            } catch (error) {
+                renderLogin();
+            }
+        } else {
+            renderLogin();
+        }
+    }
+
+    $(document).ready(init);
+
+</script>
+</body>
+</html>
