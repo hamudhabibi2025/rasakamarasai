@@ -1,0 +1,228 @@
+<script>
+  const IMG_BB_KEY = 'e9c06944a26b81e611e960c10a31634f';
+  let allData = {};
+  let currentPage = 'home';
+
+  // Dark Mode
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+
+  // Lazy Load Images
+  const lazyImages = () => {
+    document.querySelectorAll('img[data-src]').forEach(img => {
+      if (img.getBoundingClientRect().top < window.innerHeight + 200) {
+        img.src = img.dataset.src;
+        img.classList.add('loaded');
+        img.removeAttribute('data-src');
+      }
+    });
+  };
+
+  window.onload = () => {
+    loadFromCache();
+    google.script.run.withSuccessHandler(data => {
+      allData = data;
+      localStorage.setItem('askab_data', JSON.stringify(data));
+      localStorage.setItem('askab_lastupdate', Date.now());
+      renderAll();
+      startBannerSlider();
+    }).withFailureHandler(err => {
+      notify('Koneksi gagal. Menggunakan data lama.');
+      renderAll();
+    }).getAllData();
+
+    document.getElementById('globalSearch').addEventListener('input', debounce(renderPage, 300));
+    window.addEventListener('scroll', () => {
+      lazyImages();
+      document.getElementById('scrollTop').style.display = window.scrollY > 300 ? 'block' : 'none';
+    });
+  };
+
+  function loadFromCache() {
+    const cached = localStorage.getItem('askab_data');
+    const last = localStorage.getItem('askab_lastupdate');
+    if (cached && last && Date.now() - last < 10 * 60 * 1000) {
+      allData = JSON.parse(cached);
+      renderAll();
+    }
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderPage();
+    lazyImages();
+  }
+
+  function renderHeader() {
+    const h = allData.kepala_halaman?.[0] || {};
+    document.getElementById('header').innerHTML = `
+      <img src="${h.logo_pssi || 'https://via.placeholder.com/50'}" onerror="this.src='https://via.placeholder.com/50'">
+      <div class="title">${h.judul_kepala || 'ASKAB PSSI KEPULAUAN MENTAWAI'}</div>
+      <img src="${h.logo_askab || 'https://via.placeholder.com/50'}" onerror="this.src='https://via.placeholder.com/50'">
+    `;
+  }
+
+  function startBannerSlider() {
+    const banners = allData.banner?.[0] || {};
+    const slider = document.getElementById('banner-slider');
+    const images = [banners['poto-1'], banners['poto-2'], banners['poto-3']].filter(Boolean);
+    if (!images.length) return slider.remove();
+
+    slider.innerHTML = images.map((src, i) => `
+      <img class="banner-slide ${i===0?'active':''}" data-src="${src}" alt="Banner ${i+1}">
+    `).join('');
+
+    let idx = 0;
+    setInterval(() => {
+      document.querySelectorAll('.banner-slide').forEach((s, i) => {
+        s.classList.toggle('active', i === idx);
+      });
+      idx = (idx + 1) % images.length;
+    }, 4000);
+  }
+
+  // === RENDER PAGES (contoh Home & Kompetisi diperbarui) ===
+  function renderHome(search = '') {
+    const filtered = allData.berita_home.filter(b =>
+      `${b.Judul_Berita} ${b.isi_berita}`.toLowerCase().includes(search)
+    );
+    return `
+      <button class="btn" onclick="showForm('berita_home')">+ Tambah Berita</button>
+      <div class="grid">
+        ${filtered.map(b => `
+          <div class="card">
+            <h3>${b.Judul_Berita}</h3>
+            <small>${formatDate(b.tanggal)}</small>
+            <p>${truncate(b.isi_berita, 120)}</p>
+            ${b.gambar_1 ? `<img data-src="${b.gambar_1}" alt="Berita">` : ''}
+            <div style="margin-top:12px; display:flex; gap:8px;">
+              <button class="btn-sm" onclick="showForm('berita_home', '${b.id_berita}')">Edit</button>
+              <button class="btn-sm" style="background:#dc3545;" onclick="confirmDelete('berita_home', '${b.id_berita}')">Hapus</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function truncate(text, len) {
+    return text?.length > len ? text.substring(0, len) + '...' : text;
+  }
+
+  function debounce(func, wait) {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
+  // === FORM & UPLOAD (dengan kompresi & validasi) ===
+  function showForm(sheet, id = null) {
+    const data = id ? allData[sheet].find(x => x[Object.keys(x)[0]] === id) : {};
+    const form = renderForm(sheet, data, id);
+    Swal.fire({
+      title: id ? 'Edit' : 'Tambah',
+      html: form,
+      width: '90%',
+      showCancelButton: true,
+      confirmButtonText: 'Simpan',
+      preConfirm: () => validateAndSubmit(sheet, id)
+    }).then(res => res.isConfirmed && notify('Tersimpan!') && refreshData());
+  }
+
+  function validateAndSubmit(sheet, id) {
+    const form = document.getElementById('crudForm');
+    const data = {};
+    let valid = true;
+
+    form.querySelectorAll('input, select, textarea').forEach(el => {
+      if (el.required && !el.value && !el.files?.[0]) {
+        el.style.borderColor = '#dc3545';
+        valid = false;
+      } else {
+        el.style.borderColor = '#ddd';
+      }
+      if (el.files?.[0]) {
+        const file = el.files[0];
+        if (file.size > 2 * 1024 * 1024) {
+          notify('Gambar max 2MB');
+          valid = false;
+        }
+      }
+    });
+
+    if (!valid) return false;
+
+    const promises = [];
+    const formData = new FormData(form);
+    for (let [k, v] of formData.entries()) {
+      if (v instanceof File && v.size > 0) {
+        promises.push(readFile(v).then(url => data[k] = url));
+      } else if (v) {
+        data[k] = v;
+      }
+    }
+
+    return Promise.all(promises).then(() => {
+      const fn = id ? 'updateData' : 'addData';
+      return new Promise((res, rej) => {
+        google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](sheet, id || '', data);
+      });
+    });
+  }
+
+  function readFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const base64 = e.target.result.split(',')[1];
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).uploadToImgBB(base64);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function refreshData() {
+    google.script.run.withSuccessHandler(data => {
+      allData = data;
+      localStorage.setItem('askab_data', JSON.stringify(data));
+      renderAll();
+    }).getAllData();
+  }
+
+  // === UTILS ===
+  function notify(msg) {
+    const n = document.createElement('div');
+    n.className = 'notification';
+    n.textContent = msg;
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 3000);
+  }
+
+  function formatDate(d) {
+    return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function showPage(page) {
+    currentPage = page;
+    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+    renderPage();
+  }
+
+  function renderPage() {
+    const search = document.getElementById('globalSearch').value.toLowerCase();
+    let html = '';
+    if (currentPage === 'home') html = renderHome(search);
+    else if (currentPage === 'kompetisi') html = renderKompetisi(search);
+    else if (currentPage === 'klub') html = renderKlub(search);
+    else if (currentPage === 'setting') html = renderSetting();
+    document.getElementById('main-content').innerHTML = html;
+    lazyImages();
+  }
+
+  // Prevent back
+  history.pushState(null, null, location.href);
+  window.onpopstate = () => history.go(1);
+</script>
