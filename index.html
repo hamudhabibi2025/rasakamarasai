@@ -21,7 +21,7 @@
     .chat-bubble { max-width: 80%; padding: 0.5rem 0.8rem; border-radius: 18px; margin: 0.3rem 0; }
     .chat-sent { background: var(--primary); color: white; align-self: flex-end; }
     .chat-received { background: #e9ecef; align-self: flex-start; }
-    .status-dot { width: 10px; height: 10px; background: #0f0; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; }
+    .status-dot { width: 10px; height: 10px; background: #0f0; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; position: absolute; bottom: 0; right: 0; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
     .table-responsive { font-size: 0.9rem; }
     @media (min-width: 768px) {
@@ -45,7 +45,7 @@
     </div></div>
   </div>
 
-  <!-- Bottom Navigation (Mobile) -->
+  <!-- Bottom Navigation -->
   <nav class="nav-bottom d-md-none">
     <div class="d-flex justify-content-around">
       <a class="nav-link active" href="#" data-page="home"><i class="fas fa-home"></i><br>Home</a>
@@ -57,9 +57,7 @@
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- GANTI SELURUH <script> LAMA DENGAN INI -->
-
-<script>
+  <script>
   const SESSION_ID = localStorage.getItem('sessionId');
   let USER = null;
   const API_URL = 'https://script.google.com/macros/s/AKfycbx05ahOZT41R6hW-DcvuXGJRcY3nM-apyne08nsLFk672iH6HMjRPsvsBktg7Y_jAlx/exec'; // GANTI DENGAN URL DEPLOY ANDA
