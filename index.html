@@ -57,113 +57,414 @@
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    const SESSION_ID = localStorage.getItem('sessionId');
-    let USER = null;
-    const API_URL = 'https://script.google.com/macros/s/AKfycbx05ahOZT41R6hW-DcvuXGJRcY3nM-apyne08nsLFk672iH6HMjRPsvsBktg7Y_jAlx/exec'; // GANTI DENGAN URL DEPLOY ANDA
+  <!-- GANTI SELURUH <script> LAMA DENGAN INI -->
 
-    // Toast & Modal
-    const toastEl = document.getElementById('toast');
-    const toast = new bootstrap.Toast(toastEl, {delay: 3000});
-    const showToast = (msg, type = 'danger') => {
-      toastEl.className = `toast align-items-center text-white bg-${type} border-0`;
-      toastEl.querySelector('.toast-body').innerText = msg;
-      toast.show();
-    };
-    const modal = new bootstrap.Modal(document.getElementById('modal'));
+<script>
+  const SESSION_ID = localStorage.getItem('sessionId');
+  let USER = null;
+  const API_URL = 'https://script.google.com/macros/s/AKfycbx05ahOZT41R6hW-DcvuXGJRcY3nM-apyne08nsLFk672iH6HMjRPsvsBktg7Y_jAlx/exec'; // GANTI DENGAN URL DEPLOY ANDA
 
-    // Navigation
-    document.querySelectorAll('.nav-link').forEach(link => {
-      link.addEventListener('click', e => {
-        e.preventDefault();
-        document.querySelector('.nav-link.active').classList.remove('active');
-        link.classList.add('active');
-        loadPage(link.dataset.page);
-      });
+  // Toast & Modal
+  const toastEl = document.getElementById('toast');
+  const toast = new bootstrap.Toast(toastEl, {delay: 3000});
+  const showToast = (msg, type = 'danger') => {
+    toastEl.className = `toast align-items-center text-white bg-${type} border-0`;
+    toastEl.querySelector('.toast-body').innerText = msg;
+    toast.show();
+  };
+  const modal = new bootstrap.Modal(document.getElementById('modal'));
+  const showModal = (title, body, footer) => {
+    document.querySelector('.modal-title').innerText = title;
+    document.querySelector('.modal-body').innerHTML = body;
+    document.querySelector('.modal-footer').innerHTML = footer;
+    modal.show();
+  };
+
+  // Navigation
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelector('.nav-link.active').classList.remove('active');
+      link.classList.add('active');
+      loadPage(link.dataset.page);
     });
+  });
 
-    window.addEventListener('popstate', () => {
-      const page = location.hash.slice(1) || 'login';
-      loadPage(page);
-    });
+  window.addEventListener('popstate', () => {
+    const page = location.hash.slice(1) || 'login';
+    loadPage(page);
+  });
 
-    // Load Page
-    async function loadPage(page) {
-      history.pushState(null, null, `#${page}`);
-      const app = document.getElementById('app');
-      if (!SESSION_ID || page === 'login') {
-        app.innerHTML = await loginPage();
-        return;
-      }
-      if (!USER) {
-        const res = await fetch(`${API_URL}?action=checkSession&sessionId=${SESSION_ID}`);
-        const data = await res.json();
-        if (!data.valid) { localStorage.removeItem('sessionId'); return loadPage('login'); }
-        USER = data.user;
-      }
-      switch (page) {
-        case 'home': app.innerHTML = await homePage(); break;
-        case 'pemain': app.innerHTML = await pemainPage(); break;
-        case 'jadwal': app.innerHTML = await jadwalPage(); break;
-        case 'berita': app.innerHTML = await beritaPage(); break;
-        case 'chat': app.innerHTML = await chatPage(); break;
-        default: app.innerHTML = await homePage();
-      }
+  // Load Page
+  async function loadPage(page) {
+    history.pushState(null, null, `#${page}`);
+    const app = document.getElementById('app');
+    if (!SESSION_ID || page === 'login') {
+      app.innerHTML = await loginPage();
+      return;
     }
-
-    // Login Page
-    async function loginPage() {
-      return `
-        <div class="text-center p-4">
-          <h3>PSSI Mentawai</h3>
-          <form id="loginForm" class="mt-4">
-            <input type="text" class="form-control mb-3" placeholder="Username" id="username" required>
-            <input type="password" class="form-control mb-3" placeholder="Password" id="password" required>
-            <button type="submit" class="btn btn-primary w-100">Login</button>
-          </form>
-        </div>
-        <script>
-          document.getElementById('loginForm').onsubmit = async e => {
-            e.preventDefault();
-            const res = await fetch(\`${API_URL}?action=login&username=\${e.target.username.value}&password=\${e.target.password.value}\`);
-            const data = await res.json();
-            if (data.success) {
-              localStorage.setItem('sessionId', data.sessionId);
-              USER = data.user;
-              loadPage('home');
-            } else showToast(data.message);
-          };
-        </script>
-      `;
-    }
-
-    // Home, Pemain, Jadwal, Berita, Chat → akan diimplementasikan secara bertahap karena panjang.
-    // Untuk alasan panjang, hanya bagian inti yang diberikan. Anda bisa minta lanjutan per halaman.
-
-    // Contoh Home Page (Ringkas)
-    async function homePage() {
-      const res = await fetch(`${API_URL}?action=getUserData&sessionId=${SESSION_ID}`);
+    if (!USER) {
+      const res = await fetch(`${API_URL}?action=checkSession&sessionId=${SESSION_ID}`);
       const data = await res.json();
-      if (!data.success) return loadPage('login');
-      return `
-        <div class="card p-3">
-          <h5>Selamat Datang, ${data.user.namaLengkap}</h5>
-          <p>Tipe: ${data.user.tipe}<br>ID Klub: ${data.user.idKlub}<br>Klub: ${data.user.namaKlub}</p>
-          <button class="btn btn-primary" onclick="editKlub()">Edit Data Klub</button>
-          <button class="btn btn-danger mt-2" onclick="logout()">Logout</button>
+      if (!data.valid) { localStorage.removeItem('sessionId'); return loadPage('login'); }
+      USER = data.user;
+    }
+    switch (page) {
+      case 'home': app.innerHTML = await homePage(); break;
+      case 'pemain': app.innerHTML = await pemainPage(); break;
+      case 'jadwal': app.innerHTML = await jadwalPage(); break;
+      case 'berita': app.innerHTML = await beritaPage(); break;
+      case 'chat': app.innerHTML = await chatPage(); break;
+      default: app.innerHTML = await homePage();
+    }
+  }
+
+  // === LOGIN PAGE ===
+  async function loginPage() {
+    return `
+      <div class="text-center p-4">
+        <h3>PSSI Mentawai</h3>
+        <form id="loginForm" class="mt-4">
+          <input type="text" class="form-control mb-3" placeholder="Username" id="username" required>
+          <input type="password" class="form-control mb-3" placeholder="Password" id="password" required>
+          <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+      </div>
+      <script>
+        document.getElementById('loginForm').onsubmit = async e => {
+          e.preventDefault();
+          const res = await fetch(\`${API_URL}?action=login&username=\${e.target.username.value}&password=\${e.target.password.value}\`);
+          const data = await res.json();
+          if (data.success) {
+            localStorage.setItem('sessionId', data.sessionId);
+            USER = data.user;
+            loadPage('home');
+          } else showToast(data.message);
+        };
+      </script>
+    `;
+  }
+
+  // === HOME PAGE ===
+  async function homePage() {
+    const res = await fetch(`${API_URL}?action=getKlubData&sessionId=${SESSION_ID}`);
+    const klub = await res.json();
+    return `
+      <div class="card p-3 mb-3">
+        <h5>Selamat Datang, ${USER.namaLengkap}</h5>
+        <p><strong>Tipe:</strong> ${USER.tipe}<br>
+           <strong>Klub:</strong> ${USER.namaKlub || '-'} (${USER.idKlub || '-'})</p>
+        ${['ADMIN_KLUB', 'ADMIN_PUSAT'].includes(USER.tipe) ? `<button class="btn btn-primary w-100" onclick="editKlub()">Data Klub</button>` : ''}
+        <button class="btn btn-danger w-100 mt-2" onclick="logout()">Logout</button>
+      </div>
+    `;
+  }
+
+  function logout() {
+    fetch(`${API_URL}?action=logout&sessionId=${SESSION_ID}`).then(() => {
+      localStorage.removeItem('sessionId');
+      loadPage('login');
+    });
+  }
+
+  // === PEMAIN PAGE ===
+  async function pemainPage() {
+    const res = await fetch(`${API_URL}?action=getPemain&sessionId=${SESSION_ID}`);
+    const {data} = await res.json();
+    const approved = data.length > 0 && data[0][8] === 'DISETUJUI';
+    const canEdit = USER.tipe === 'ADMIN_PUSAT' || (USER.tipe === 'ADMIN_KLUB' && !approved);
+
+    return `
+      <div class="card p-3">
+        <h5>Data Pemain</h5>
+        ${approved && USER.tipe === 'ADMIN_KLUB' ? '<p class="text-success">Sudah disetujui. Tidak bisa diubah.</p>' : ''}
+        <button class="btn btn-primary w-100 mb-3" onclick="editPemain()" ${!canEdit ? 'disabled' : ''}>Edit Pemain</button>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>ID</th><th>Nama</th><th>No</th><th>Lahir</th></tr></thead>
+            <tbody>
+              ${data.map(row => `<tr><td>${row[2]}</td><td>${row[3]}</td><td>${row[5]}</td><td>${formatDate(row[6])}</td></tr>`).join('')}
+              ${data.length === 0 ? '<tr><td colspan="4" class="text-center">Belum ada data</td></tr>' : ''}
+            </tbody>
+          </table>
         </div>
-      `;
-    }
+      </div>
+    `;
+  }
 
-    function logout() {
-      fetch(`${API_URL}?action=logout&sessionId=${SESSION_ID}`).then(() => {
-        localStorage.removeItem('sessionId');
-        loadPage('login');
-      });
-    }
+  window.editPemain = async () => {
+    const res = await fetch(`${API_URL}?action=getPemain&sessionId=${SESSION_ID}`);
+    const {data} = await res.json();
+    const rows = data.length > 0 ? data : Array(25).fill().map((_, i) => ['', '', i+1, '', '', '', '', '', '']);
 
-    // Start
-    loadPage(location.hash.slice(1) || (SESSION_ID ? 'home' : 'login'));
-  </script>
+    showModal('Edit Data Pemain', `
+      <form id="pemainForm">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>ID</th><th>Nama Lengkap</th><th>Nama Punggung</th><th>No</th><th>Lahir</th><th>Ket</th></tr></thead>
+            <tbody>
+              ${rows.map((row, i) => `
+                <tr>
+                  <td><input type="number" class="form-control form-control-sm" value="${row[2] || ''}" data-field="idPemain" ${i>=16?'disabled':''}></td>
+                  <td><input type="text" class="form-control form-control-sm" value="${row[3] || ''}" data-field="namaLengkap"></td>
+                  <td><input type="text" class="form-control form-control-sm" value="${row[4] || ''}" data-field="namaPunggung"></td>
+                  <td><input type="number" class="form-control form-control-sm" value="${row[5] || ''}" data-field="noPunggung"></td>
+                  <td><input type="date" class="form-control form-control-sm" value="${row[6] ? new Date(row[6]).toISOString().split('T')[0] : ''}" data-field="tanggalLahir"></td>
+                  <td><input type="text" class="form-control form-control-sm" value="${row[7] || ''}" data-field="keterangan"></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </form>
+    `, `
+      <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+      <button class="btn btn-primary" onclick="savePemain()">Simpan</button>
+    `);
+  };
+
+  window.savePemain = async () => {
+    const form = document.getElementById('pemainForm');
+    const inputs = form.querySelectorAll('input');
+    const data = {idPemain: [], namaLengkap: [], namaPunggung: [], noPunggung: [], tanggalLahir: [], keterangan: []};
+    inputs.forEach(input => {
+      const field = input.dataset.field;
+      if (field) data[field].push(input.value);
+    });
+
+    const res = await fetch(`${API_URL}?action=savePemain&sessionId=${SESSION_ID}`, {
+      method: 'POST',
+      body: new URLSearchParams(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+      showToast('Data pemain disimpan', 'success');
+      modal.hide();
+      loadPage('pemain');
+    } else showToast(result.message);
+  };
+
+  // === JADWAL PAGE ===
+  async function jadwalPage() {
+    const res = await fetch(`${API_URL}?action=getJadwal&sessionId=${SESSION_ID}`);
+    const {data} = await res.json();
+    return `
+      <div class="card p-3">
+        <h5>Jadwal Pertandingan</h5>
+        ${data.length === 0 ? '<p class="text-center">Tidak ada jadwal</p>' : ''}
+        ${data.map(row => `
+          <div class="card mb-2 p-3" onclick="openPendaftaran('${row[0]}')">
+            <strong>${row[7]} - ${row[1] ? new Date(row[1]).toLocaleDateString('id') : ''}</strong><br>
+            ${row[4]} • ${row[8]}<br>
+            <small>Batas input: ${formatDate(row[2])} - ${formatDate(row[3])}</small>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  window.openPendaftaran = async (idPertandingan) => {
+    const res = await fetch(`${API_URL}?action=getPendaftaran&idPertandingan=${idPertandingan}&sessionId=${SESSION_ID}`);
+    const {data} = await res.json();
+    const pemainRes = await fetch(`${API_URL}?action=getPemain&sessionId=${SESSION_ID}`);
+    const pemain = await pemainRes.json();
+    const approved = data.length > 0 && data[0][7] === 'DISETUJUI';
+
+    showModal(`Daftar Pemain - ${idPertandingan}`, `
+      <form id="daftarForm">
+        <input type="hidden" name="idPertandingan" value="${idPertandingan}">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>Pemain</th><th>No</th><th>Posisi</th><th>Tipe</th></tr></thead>
+            <tbody>
+              ${Array(25).fill().map((_, i) => {
+                const p = data[i] || ['', '', '', '', '', '', ''];
+                const options = pemain.data.map(r => `<option value="${r[2]}" ${p[2]==r[2]?'selected':''}>${r[3]} (#${r[5]})</option>`).join('');
+                return `
+                  <tr>
+                    <td><select class="form-select form-select-sm" data-field="idPemain" onchange="fillPemain(this, ${i})">
+                      <option value="">-- Pilih --</option>${options}
+                    </select></td>
+                    <td><input type="number" class="form-control form-control-sm" value="${p[4]}" data-field="noPunggung"></td>
+                    <td><input type="text" class="form-control form-control-sm" value="${p[5]}" data-field="posisi"></td>
+                    <td><select class="form-select form-select-sm" data-field="tipePemain">
+                      <option ${p[6]==='PEMAIN UTAMA'?'selected':''}>PEMAIN UTAMA</option>
+                      <option ${p[6]==='PEMAIN CADANGAN'?'selected':''}>PEMAIN CADANGAN</option>
+                    </select></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </form>
+    `, `
+      <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+      <button class="btn btn-primary" onclick="saveDaftar()">Simpan</button>
+    `);
+  };
+
+  window.fillPemain = (select, i) => {
+    const row = select.closest('tr');
+    const id = select.value;
+    if (!id) return;
+    const pemain = document.querySelectorAll('#pemainForm input, #pemainForm select');
+    // Auto-fill dari data pemain
+  };
+
+  window.saveDaftar = async () => {
+    const form = document.getElementById('daftarForm');
+    const inputs = form.querySelectorAll('select, input');
+    const data = {idPertandingan: form.idPertandingan.value, idPemain: [], namaPunggung: [], noPunggung: [], posisi: [], tipePemain: []};
+    inputs.forEach(input => {
+      const field = input.dataset.field;
+      if (field) data[field].push(input.value);
+    });
+    const res = await fetch(`${API_URL}?action=savePendaftaran&sessionId=${SESSION_ID}`, {
+      method: 'POST',
+      body: new URLSearchParams(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+      showToast('Pendaftaran disimpan', 'success');
+      modal.hide();
+    } else showToast(result.message);
+  };
+
+  // === BERITA PAGE ===
+  async function beritaPage() {
+    const res = await fetch(`${API_URL}?action=getBerita`);
+    const {data} = await res.json();
+    return `
+      <div class="card p-3">
+        <h5>Berita PSSI Mentawai</h5>
+        ${['ADMIN_MEDIA', 'ADMIN_PUSAT'].includes(USER.tipe) ? `<button class="btn btn-primary w-100 mb-3" onclick="tambahBerita()">Tambah Berita</button>` : ''}
+        ${data.map(row => `
+          <div class="card mb-2 p-3">
+            ${row[4] ? `<img src="${row[4]}" class="img-fluid rounded mb-2" style="max-height:200px">` : ''}
+            <strong>${row[2]}</strong><br>
+            <small>${new Date(row[1]).toLocaleDateString('id')} • ${row[5]}</small>
+            <p class="mt-2">${row[3].substring(0, 150)}${row[3].length > 150 ? '...' : ''}</p>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  window.tambahBerita = () => {
+    showModal('Tambah Berita', `
+      <form id="beritaForm">
+        <input type="date" class="form-control mb-2" id="tanggal" required>
+        <input type="text" class="form-control mb-2" placeholder="Judul" id="judul" required>
+        <textarea class="form-control mb-2" rows="4" placeholder="Isi Berita" id="isi" required></textarea>
+        <input type="url" class="form-control mb-2" placeholder="URL Foto (imgbb)" id="photoUrl">
+      </form>
+    `, `
+      <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+      <button class="btn btn-primary" onclick="saveBerita()">Simpan</button>
+    `);
+  };
+
+  window.saveBerita = async () => {
+    const form = document.getElementById('beritaForm');
+    const data = {
+      tanggal: form.tanggal.value,
+      judul: form.judul.value,
+      isi: form.isi.value,
+      photoUrl: form.photoUrl.value
+    };
+    const res = await fetch(`${API_URL}?action=saveBerita&sessionId=${SESSION_ID}`, {
+      method: 'POST',
+      body: new URLSearchParams(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+      showToast('Berita disimpan', 'success');
+      modal.hide();
+      loadPage('berita');
+    } else showToast(result.message);
+  };
+
+  // === CHAT PAGE ===
+  let chatInterval;
+  async function chatPage() {
+    const res = await fetch(`${API_URL}?action=getChatUsers&sessionId=${SESSION_ID}`);
+    const {users} = await res.json();
+    return `
+      <div class="card p-3" style="height: calc(100vh - 140px); overflow-y: auto;">
+        <h5>Chat</h5>
+        ${users.map(u => `
+          <div class="d-flex align-items-center p-2 border-bottom" onclick="openChat('${u.username}')">
+            <div class="me-3 position-relative">
+              <div class="bg-secondary rounded-circle" style="width:40px;height:40px;"></div>
+              ${u.active ? '<span class="status-dot"></span>' : ''}
+            </div>
+            <div class="flex-grow-1">
+              <strong>${u.namaLengkap}</strong><br>
+              <small>${u.namaKlub || 'Pusat/Media'}</small>
+            </div>
+            <span id="badge-${u.username}" class="badge-unread" style="display:none">0</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  window.openChat = async (receiver) => {
+    const sender = USER.username;
+    const res = await fetch(`${API_URL}?action=getChat&sender=${sender}&receiver=${receiver}`);
+    const {messages} = await res.json();
+
+    showModal(`Chat dengan ${receiver}`, `
+      <div id="chatBox" style="height: 400px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 10px; display: flex; flex-direction: column;">
+        ${messages.map(m => `
+          <div class="chat-bubble ${m[1] === sender ? 'chat-sent' : 'chat-received'}">
+            ${m[3]}
+            <small style="display:block; opacity:0.7; font-size:0.7rem;">${new Date(m[0]).toLocaleTimeString('id', {hour: '2-digit', minute: '2-digit'})}</small>
+          </div>
+        `).join('')}
+      </div>
+      <div class="input-group mt-2">
+        <input type="text" id="msgInput" class="form-control" placeholder="Ketik pesan...">
+        <button class="btn btn-primary" onclick="sendMessage('${receiver}')">Kirim</button>
+      </div>
+    `, '');
+
+    // Auto refresh
+    chatInterval = setInterval(() => loadMessages(sender, receiver), 3000);
+    fetch(`${API_URL}?action=markRead&sender=${receiver}&receiver=${sender}`);
+  };
+
+  async function loadMessages(sender, receiver) {
+    const res = await fetch(`${API_URL}?action=getChat&sender=${sender}&receiver=${receiver}`);
+    const {messages} = await res.json();
+    const box = document.getElementById('chatBox');
+    box.innerHTML = messages.map(m => `
+      <div class="chat-bubble ${m[1] === sender ? 'chat-sent' : 'chat-received'}">
+        ${m[3]}
+        <small style="display:block; opacity:0.7; font-size:0.7rem;">${new Date(m[0]).toLocaleTimeString('id', {hour: '2-digit', minute: '2-digit'})}</small>
+      </div>
+    `).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  window.sendMessage = async (receiver) => {
+    const input = document.getElementById('msgInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    await fetch(`${API_URL}?action=sendChat&sessionId=${SESSION_ID}&receiver=${receiver}&message=${encodeURIComponent(msg)}`, {method: 'POST'});
+    input.value = '';
+    loadMessages(USER.username, receiver);
+  };
+
+  // Utils
+  function formatDate(date) {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString('id');
+  }
+
+  // Start
+  loadPage(location.hash.slice(1) || (SESSION_ID ? 'home' : 'login'));
+</script>
 </body>
 </html>
