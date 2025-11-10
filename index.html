@@ -1,1098 +1,625 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-    <base target="_top">
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Aplikasi PSSI Mentawai</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        /* CSS Kustom */
-        body { background-color: #f8f9fa; }
-
-        /* Persyaratan 1: Notifikasi Melayang (1/3 atas tengah) */
-        .floating-notification {
-            position: fixed;
-            top: 33%; /* sepertiga atas */
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 1050;
-            min-width: 300px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-
-        /* Persyaratan 2, 5-9: Modal Dialog (1/3 atas tengah) */
-        .modal-dialog-centered-top {
-            display: flex;
-            align-items: flex-start;
-            min-height: calc(100% - 1rem);
-            padding-top: 10vh; /* Sesuaikan padding untuk sepertiga atas */
-        }
-        
-        /* Persyaratan 9: Loading JANGAN MENGGANGGU */
-        .modal-loading .modal-content {
-            background: transparent;
-            border: none;
-        }
-        .modal-loading .modal-backdrop {
-            opacity: 0.1 !important; /* Transparansi rendah */
-        }
-
-        /* CSS Chat Interface (Persyaratan 9) */
-        .chat-card { height: 70vh !important; }
-        .chat-body { 
-            height: 100% !important; 
-            overflow-y: scroll;
-            display: flex;
-            flex-direction: column-reverse; /* Tampilkan chat terbaru di bawah (scroll ke bawah) */
-        }
-        .chat-message { max-width: 75%; padding: 8px; border-radius: 10px; margin-bottom: 5px; }
-        .chat-message.me { background-color: #DCF8C6; align-self: flex-end; } /* Hijau Muda, kanan */
-        .chat-message.other { background-color: #FFFFFF; align-self: flex-start; border: 1px solid #eee; } /* Putih/Terang, kiri */
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PSSI Mentawai</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"/>
+  <style>
+    body, html { margin:0; padding:0; height:100%; font-family: 'Segoe UI', sans-serif; font-size: 14px; }
+    #app { display: none; }
+    .nav-bottom { position: fixed; bottom: 0; width: 100%; background: #1a1a1a; color: white; z-index: 1000; }
+    .nav-bottom .nav-link { color: #ccc; font-size: 12px; }
+    .nav-bottom .nav-link.active { color: #0d6efd; }
+    .page { padding: 10px; padding-bottom: 70px; }
+    .card { margin-bottom: 10px; font-size: 13px; }
+    .toast { position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%); z-index: 1050; min-width: 200px; }
+    .modal { position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%); z-index: 1055; width: 90%; max-width: 400px; }
+    .badge-unread { background: red; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+    .user-active::after { content: ''; width: 10px; height: 10px; background: lime; border-radius: 50%; display: inline-block; margin-left: 5px; }
+    input, select, textarea { font-size: 14px !important; }
+    @media (min-width: 768px) { body::before { content: 'Gunakan perangkat seluler'; display: block; text-align: center; padding: 50px; font-size: 18px; } #app, .nav-bottom { display: none !important; } }
+  </style>
 </head>
 <body>
+  <div id="loginPage" class="container page">
+    <h4 class="text-center mb-4">Login PSSI Mentawai</h4>
+    <input type="text" id="username" class="form-control mb-2" placeholder="Username" />
+    <input type="password" id="password" class="form-control mb-3" placeholder="Password" />
+    <button onclick="login()" class="btn btn-primary w-100">Login</button>
+  </div>
 
-<div id="app" class="container mt-5">
-    </div>
+  <div id="app" class="d-none">
+    <div id="home" class="page"></div>
+    <div id="pemain" class="page d-none"></div>
+    <div id="jadwal" class="page d-none"></div>
+    <div id="berita" class="page d-none"></div>
+    <div id="chat" class="page d-none"></div>
+  </div>
 
-<div class="modal fade modal-loading" id="loadingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-        <div class="modal-content">
-            <div class="text-center">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"><span class="visually-hidden">Loading...</span></div>
-            </div>
+  <div class="toast" id="toast"></div>
+  <div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Konfirmasi</h5></div>
+        <div class="modal-body" id="confirmText"></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button class="btn btn-primary" id="confirmYes">Ya</button>
         </div>
+      </div>
     </div>
-</div>
+  </div>
 
-<div id="notificationContainer"></div>
+  <ul class="nav nav-pills nav-bottom d-flex justify-content-around py-2">
+    <li class="nav-item"><a class="nav-link active" onclick="showPage('home')"><i class="bi bi-house"></i><br>Home</a></li>
+    <li class="nav-item"><a class="nav-link" onclick="showPage('pemain')"><i class="bi bi-people"></i><br>Pemain</a></li>
+    <li class="nav-item"><a class="nav-link" onclick="showPage('jadwal')"><i class="bi bi-calendar"></i><br>Jadwal</a></li>
+    <li class="nav-item"><a class="nav-link" onclick="showPage('berita')"><i class="bi bi-newspaper"></i><br>Berita</a></li>
+    <li class="nav-item"><a class="nav-link" onclick="showPage('chat')"><i class="bi bi-chat-dots"></i><br>Chat</a></li>
+  </ul>
 
-<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm modal-dialog-centered-top">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="confirmationModalLabel">Konfirmasi Aksi</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx05ahOZT41R6hW-DcvuXGJRcY3nM-apyne08nsLFk672iH6HMjRPsvsBktg7Y_jAlx/exec'; // GANTI DENGAN URL WEB APP
+    let user = null, sessionId = null;
+    let currentChat = null;
+    let chatInterval = null;
+
+    window.onload = () => {
+      const saved = localStorage.getItem('session');
+      if (saved) {
+        const {s, u} = JSON.parse(saved);
+        sessionId = s; user = u;
+        google.script.run.withSuccessHandler(res => {
+          if (res.valid) loadHome();
+          else showLogin();
+        }).checkSession({sessionId: s});
+      } else showLogin();
+    };
+
+    function showLogin() {
+      document.getElementById('loginPage').classList.remove('d-none');
+      document.getElementById('app').classList.add('d-none');
+    }
+
+    function login() {
+      const u = document.getElementById('username').value.trim();
+      const p = document.getElementById('password').value;
+      if (!u || !p) return toast('Isi username dan password');
+      google.script.run.withSuccessHandler(res => {
+        if (res.success) {
+          user = res.user; sessionId = res.sessionId;
+          localStorage.setItem('session', JSON.stringify({s: sessionId, u: user}));
+          document.getElementById('loginPage').classList.add('d-none');
+          document.getElementById('app').classList.remove('d-none');
+          loadHome();
+        } else toast(res.message);
+      }).login({username: u, password: p});
+    }
+
+    function logout() {
+      google.script.run.withSuccessHandler(() => {
+        localStorage.clear();
+        showLogin();
+      }).logout({sessionId});
+    }
+
+    function showPage(page) {
+      if (chatInterval && page !== 'chat') clearInterval(chatInterval);
+      document.querySelectorAll('.page').forEach(p => p.classList.add('d-none'));
+      document.getElementById(page).classList.remove('d-none');
+      document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+      document.querySelector(`a[onclick="showPage('${page}')"]`).classList.add('active');
+      window[`load${page.charAt(0).toUpperCase() + page.slice(1)}`]();
+    }
+
+    function toast(msg, type = 'danger') {
+      const t = document.getElementById('toast');
+      t.innerHTML = `<div class="toast-body text-white bg-${type}">${msg}</div>`;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // === HOME ===
+    function loadHome() {
+      const el = document.getElementById('home');
+      el.innerHTML = `
+        <div class="card mb-3"><div class="card-body">
+          <b>${user.nama_lengkap}</b><br>
+          ${user.tipe_users} - ${user.id_klub || '-'} - ${user.nama_klub || '-'}
+          <button class="btn btn-sm btn-danger float-end" onclick="logout()">Logout</button>
+        </div></div>
+        <div id="klubForm"></div>
+      `;
+      if (['ADMIN_KLUB', 'ADMIN_PUSAT'].includes(user.tipe_users)) loadKlubForm();
+    }
+
+    function loadKlubForm() {
+      google.script.run.withSuccessHandler(res => {
+        const el = document.getElementById('klubForm');
+        const approved = res.approved;
+        el.innerHTML = `<div class="card"><div class="card-body">
+          <h6>Data Klub</h6>
+          ${generateKlubInputs(res.data, approved)}
+          ${!approved ? `<button class="btn btn-primary mt-2" onclick="saveKlub()">Simpan</button>` : ''}
+          ${user.tipe_users === 'ADMIN_PUSAT' ? `<button class="btn btn-warning mt-2" onclick="approveKlub('${res.data[0]}', false)">Batalkan Persetujuan</button>` : ''}
+        </div></div>`;
+      }).getKlubData({id_klub: user.id_klub});
+    }
+
+    function generateKlubInputs(data, approved) {
+      const fields = ['julukan','tanggal_berdiri','alamat','desa','kecamatan','no_handphone','email','manajer','asisten_manajer','sekretaris','bendahara','pelatih','asisten_pelatih','staff_lainnya'];
+      return fields.map((f, i) => `<input type="${f.includes('tanggal') ? 'date' : 'text'}" class="form-control form-control-sm mb-1" id="${f}" value="${data ? data[i+2] || '' : ''}" ${approved ? 'disabled' : ''}>`).join('');
+    }
+
+    function saveKlub() {
+      const data = {};
+      ['julukan','tanggal_berdiri','alamat','desa','kecamatan','no_handphone','email','manajer','asisten_manajer','sekretaris','bendahara','pelatih','asisten_pelatih','staff_lainnya'].forEach(f => data[f] = document.getElementById(f).value);
+      google.script.run.withSuccessHandler(res => {
+        if (res.success) { toast('Data klub tersimpan', 'success'); loadKlubForm(); }
+        else toast(res.message);
+      }).saveKlub({user: JSON.stringify(user), ...data});
+    }
+
+    function approveKlub(id, approve) {
+      google.script.run.withSuccessHandler(() => { toast('Status diperbarui'); loadKlubForm(); }).approveKlub({id_klub: id, approve});
+    }
+
+    // === PEMAIN ===
+    function loadPemain() {
+      const el = document.getElementById('pemain');
+      el.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+
+      google.script.run.withSuccessHandler(res => {
+        const klubApproved = res.approved;
+        if (!klubApproved && user.tipe_users !== 'ADMIN_PUSAT') {
+          el.innerHTML = '<div class="alert alert-warning">Data klub belum disetujui ADMIN_PUSAT.</div>';
+          return;
+        }
+
+        google.script.run.withSuccessHandler(pemain => {
+          el.innerHTML = `
+            <div class="card mb-3">
+              <div class="card-body">
+                <h6>Pemain Kolektif</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered" id="pemainTable">
+                    <thead class="table-light"><tr>
+                      <th>ID</th><th>Nama</th><th>Punggung</th><th>No</th><th>Lahir</th><th>Ket</th><th>Aksi</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="addPemainRow()">+ Tambah</button>
+                <button class="btn btn-sm btn-success mt-1" onclick="saveAllPemain()">Simpan</button>
+              </div>
+            </div>`;
+
+          const tbody = el.querySelector('#pemainTable tbody');
+          pemain.forEach(p => addPemainRow(p));
+          for (let i = pemain.length; i < 25; i++) addPemainRow();
+        }).getPemain({id_klub: user.id_klub});
+      }).getKlubData({id_klub: user.id_klub});
+    }
+
+    function addPemainRow(data = null) {
+      const tbody = document.querySelector('#pemainTable tbody');
+      const isApproved = data && data.approved;
+      const disabled = isApproved && user.tipe_users !== 'ADMIN_PUSAT' ? 'disabled' : '';
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><input type="number" class="form-control form-control-sm id_pemain" value="${data?.id_pemain || ''}" ${disabled}></td>
+        <td><input type="text" class="form-control form-control-sm nama" value="${data?.nama_lengkap || ''}" ${disabled}></td>
+        <td><input type="text" class="form-control form-control-sm punggung" value="${data?.nama_punggung || ''}" ${disabled}></td>
+        <td><input type="number" class="form-control form-control-sm no" value="${data?.no_punggung || ''}" ${disabled}></td>
+        <td><input type="date" class="form-control form-control-sm lahir" value="${data?.tgl_lahir || ''}" ${disabled}></td>
+        <td><input type="text" class="form-control form-control-sm ket" value="${data?.keterangan || ''}" ${disabled}></td>
+        <td>
+          ${user.tipe_users === 'ADMIN_PUSAT' ? `
+            <button class="btn btn-sm btn-${isApproved ? 'warning' : 'success'}" onclick="approvePemain(this, '${data?.id_pemain}', ${!isApproved})">
+              ${isApproved ? 'Batal' : 'Setujui'}
+            </button>` : ''}
+        </td>`;
+      tbody.appendChild(row);
+    }
+
+    function saveAllPemain() {
+      const rows = document.querySelectorAll('#pemainTable tbody tr');
+      const pemain = [];
+      const ids = new Set();
+
+      rows.forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        const id = inputs[0].value.trim();
+        if (id && !ids.has(id)) {
+          ids.add(id);
+          pemain.push({
+            id_pemain: id,
+            nama_lengkap: inputs[1].value,
+            nama_punggung: inputs[2].value,
+            no_punggung: inputs[3].value,
+            tgl_lahir: inputs[4].value,
+            keterangan: inputs[5].value
+          });
+        }
+      });
+
+      if (pemain.length === 0) return toast('Tidak ada data untuk disimpan');
+
+      google.script.run.withSuccessHandler(res => {
+        if (res.success) {
+          toast('Pemain disimpan', 'success');
+          loadPemain();
+        }
+      }).savePemain({id_klub: user.id_klub, pemain: JSON.stringify(pemain)});
+    }
+
+    function approvePemain(btn, id, approve) {
+      google.script.run.withSuccessHandler(() => {
+        toast(approve ? 'Disetujui' : 'Dibatalkan', 'info');
+        loadPemain();
+      }).approvePemain({id_pemain: id, approve});
+    }
+
+    // === JADWAL ===
+    function loadJadwal() {
+      const el = document.getElementById('jadwal');
+      el.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+
+      if (user.tipe_users === 'ADMIN_PUSAT') {
+        loadJadwalAdminPusat();
+      } else {
+        loadJadwalKlub();
+      }
+    }
+
+    function loadJadwalKlub() {
+      google.script.run.withSuccessHandler(jadwal => {
+        const el = document.getElementById('jadwal');
+        el.innerHTML = jadwal.length === 0 ? '<div class="alert alert-info">Tidak ada jadwal</div>' : '';
+        jadwal.forEach(j => {
+          const card = document.createElement('div');
+          card.className = 'card mb-2';
+          card.innerHTML = `
+            <div class="card-body p-2">
+              <h6 class="mb-1">${j.nama_klub} - ${j.type}</h6>
+              <small>${new Date(j.tgl).toLocaleDateString('id-ID')} | ${j.lokasi}</small>
+              <button class="btn btn-sm btn-primary float-end" onclick="openPendaftaran('${j.id_pertandingan}')">Daftar</button>
+            </div>`;
+          el.appendChild(card);
+        });
+      }).getJadwal({id_klub: user.id_klub});
+    }
+
+    function loadJadwalAdminPusat() {
+      google.script.run.withSuccessHandler(jadwal => {
+        const el = document.getElementById('jadwal');
+        el.innerHTML = `
+          <div class="card mb-3">
+            <div class="card-body">
+              <h6>Buat Jadwal Baru</h6>
+              <input type="date" id="newTgl" class="form-control form-control-sm mb-1">
+              <input type="date" id="newBatasAwal" class="form-control form-control-sm mb-1">
+              <input type="date" id="newBatasAkhir" class="form-control form-control-sm mb-1">
+              <select id="newType" class="form-control form-control-sm mb-1">
+                <option>Babak Kualifikasi</option><option>Babak Penyisihan</option><option>16 Besar</option><option>Semifinal</option><option>Final</option>
+              </select>
+              <input type="text" id="newIdKlub" placeholder="ID Klub" class="form-control form-control-sm mb-1">
+              <input type="text" id="newNamaKlub" placeholder="Nama Klub" class="form-control form-control-sm mb-1">
+              <input type="text" id="newLokasi" placeholder="Lokasi" class="form-control form-control-sm mb-1">
+              <button class="btn btn-sm btn-success" onclick="saveNewJadwal()">Simpan</button>
             </div>
-            <div class="modal-body" id="confirmationModalBody">
-                Yakin ingin melanjutkan aksi ini?
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                <button type="button" class="btn btn-danger" id="confirmActionButton">Ya, Lanjutkan</button>
-            </div>
+          </div>`;
+        
+        jadwal.forEach(j => {
+          const card = document.createElement('div');
+          card.className = 'card mb-2';
+          card.innerHTML = `
+            <div class="card-body p-2">
+              <b>${j.id_pertandingan}</b> - ${j.type}<br>
+              <small>${new Date(j.tgl).toLocaleDateString('id-ID')} | ${j.nama_klub}</small>
+              <button class="btn btn-sm btn-danger float-end" onclick="hapusJadwal('${j.id_pertandingan}')">Hapus</button>
+            </div>`;
+          el.appendChild(card);
+        });
+      }).getAllJadwal();
+    }
+
+    function saveNewJadwal() {
+      const data = {
+        tgl: document.getElementById('newTgl').value,
+        batas_awal: document.getElementById('newBatasAwal').value,
+        batas_akhir: document.getElementById('newBatasAkhir').value,
+        type: document.getElementById('newType').value,
+        id_klub: document.getElementById('newIdKlub').value,
+        nama_klub: document.getElementById('newNamaKlub').value,
+        lokasi: document.getElementById('newLokasi').value
+      };
+      google.script.run.withSuccessHandler(() => {
+        toast('Jadwal dibuat', 'success');
+        loadJadwal();
+      }).saveJadwal(data);
+    }
+
+    function hapusJadwal(id) {
+      if (confirm('Hapus jadwal ini?')) {
+        google.script.run.withSuccessHandler(() => {
+          toast('Dihapus');
+          loadJadwal();
+        }).deleteJadwal(id);
+      }
+    }
+
+    function openPendaftaran(id_pertandingan) {
+      sessionStorage.setItem('current_match', id_pertandingan);
+      showPage('jadwal');
+      loadPendaftaranForm(id_pertandingan);
+    }
+
+    function loadPendaftaranForm(id_pertandingan) {
+      const el = document.getElementById('jadwal');
+      el.innerHTML = `<div class="card"><div class="card-body">
+        <h6>Pendaftaran Pemain - ${id_pertandingan}</h6>
+        <button class="btn btn-sm btn-secondary mb-2" onclick="loadJadwal()">Kembali</button>
+        <div class="table-responsive">
+          <table class="table table-sm" id="daftarTable">
+            <thead class="table-light"><tr>
+              <th>Pemain</th><th>No</th><th>Posisi</th><th>Tipe</th><th>Aksi</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
         </div>
-    </div>
-</div>
+        <button class="btn btn-sm btn-primary" onclick="addDaftarRow()">+ Pemain</button>
+        <button class="btn btn-sm btn-success" onclick="saveDaftar()">Simpan</button>
+      </div></div>`;
 
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-<script>
-    // =======================================================
-    // !!! GANTI DENGAN URL DEPLOYMENT APPS SCRIPT ANDA !!!
-    // =======================================================
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzz3iH0IcwSQG0BFrvzebJbPtkiru-zKff32B_Oz1AgnUBuZQ2--nWRzh3BvTvTbkzk/exec';
-    
-    let loadingModalInstance;
-    let allUsers = []; // Variabel global untuk menyimpan daftar pengguna chat
-
-    // --- UTILITY FUNCTIONS ---
-    // Persyaratan 9: Loading JANGAN MENGGANGGU
-    function showLoading(show) {
-        if (!loadingModalInstance) {
-            loadingModalInstance = new bootstrap.Modal(document.getElementById('loadingModal'));
-        }
-        if (show) {
-            loadingModalInstance.show();
-        } else {
-            loadingModalInstance.hide();
-        }
-    }
-    
-    // Persyaratan 1: Notifikasi Melayang
-    function showNotification(message, type = 'success') {
-        const alertClass = `alert-${type}`;
-        const html = `
-            <div class="alert ${alertClass} floating-notification alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
-        $('#notificationContainer').html(html);
-        setTimeout(() => { $('.floating-notification').alert('close'); }, 5000);
+      google.script.run.withSuccessHandler(daftar => {
+        const tbody = document.querySelector('#daftarTable tbody');
+        daftar.forEach(d => addDaftarRow(d));
+        for (let i = daftar.length; i < 25; i++) addDaftarRow();
+      }).getPendaftaran({id_pertandingan, id_klub: user.id_klub});
     }
 
-    // Persyaratan 2: Konfirmasi Modal Dialog
-    function showConfirmation(message, callback) {
-        $('#confirmationModalBody').text(message);
-        const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-        $('#confirmActionButton').off('click').on('click', function() {
-            confirmationModal.hide();
-            callback();
+    function addDaftarRow(data = null) {
+      const tbody = document.querySelector('#daftarTable tbody');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>
+          <select class="form-control form-control-sm pemain-select" ${data?.approved ? 'disabled' : ''}>
+            <option value="">Pilih Pemain</option>
+          </select>
+        </td>
+        <td><input type="number" class="form-control form-control-sm no" value="${data?.no_punggung || ''}" ${data?.approved ? 'disabled' : ''}></td>
+        <td><input type="text" class="form-control form-control-sm posisi" value="${data?.posisi || ''}" ${data?.approved ? 'disabled' : ''}></td>
+        <td>
+          <select class="form-control form-control-sm tipe" ${data?.approved ? 'disabled' : ''}>
+            <option ${data?.tipe === 'PEMAIN UTAMA' ? 'selected' : ''}>PEMAIN UTAMA</option>
+            <option ${data?.tipe === 'PEMAIN CADANGAN' ? 'selected' : ''}>PEMAIN CADANGAN</option>
+          </select>
+        </td>
+        <td>
+          ${user.tipe_users === 'ADMIN_PUSAT' ? `<button class="btn btn-sm btn-${data?.approved ? 'warning' : 'success'}" onclick="approveDaftar(this, '${data?.id_pemain}', ${!data?.approved})">${data?.approved ? 'Batal' : 'Setujui'}</button>` : ''}
+        </td>`;
+      tbody.appendChild(row);
+
+      google.script.run.withSuccessHandler(pemain => {
+        const select = row.querySelector('.pemain-select');
+        pemain.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id_pemain;
+          opt.text = `${p.id_pemain} - ${p.nama_lengkap}`;
+          if (data && data.id_pemain === p.id_pemain) opt.selected = true;
+          select.appendChild(opt);
         });
-        confirmationModal.show();
+        select.onchange = () => {
+          const selected = pemain.find(p => p.id_pemain == select.value);
+          if (selected) {
+            row.querySelector('.no').value = selected.no_punggung;
+            row.querySelector('.posisi').value = selected.keterangan || '';
+          }
+        };
+      }).getPemain({id_klub: user.id_klub});
     }
 
-    // API CALL FUNCTION
-    async function callAppsScript(action, data = {}) {
-        showLoading(true);
-        const tokenId = localStorage.getItem('tokenId');
-        if (tokenId) { data.token_id = tokenId; }
+    function saveDaftar() {
+      const rows = document.querySelectorAll('#daftarTable tbody tr');
+      const daftar = [];
+      const ids = new Set();
 
-        try {
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action, ...data })
-            });
-
-            if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
-
-            const result = await response.json();
-            showLoading(false);
-
-            if (result.success) {
-                return result.data;
-            } else if (result.message.includes('Sesi tidak valid')) {
-                showNotification(result.message, 'warning');
-                localStorage.removeItem('tokenId');
-                localStorage.removeItem('userProfile');
-                renderLogin();
-                throw new Error(result.message);
-            } else {
-                throw new Error(result.message || 'Operasi gagal.');
-            }
-        } catch (error) {
-            showLoading(false);
-            showNotification(`Error: ${error.message}`, 'danger');
-            console.error('Apps Script Call Error:', error);
-            throw error;
+      rows.forEach(row => {
+        const select = row.querySelector('.pemain-select');
+        const id = select.value;
+        if (id && !ids.has(id)) {
+          ids.add(id);
+          daftar.push({
+            id_pemain: id,
+            nama_punggung: select.options[select.selectedIndex].text.split(' - ')[1],
+            no_punggung: row.querySelector('.no').value,
+            posisi: row.querySelector('.posisi').value,
+            tipe: row.querySelector('.tipe').value
+          });
         }
-    }
-    
-    // Persyaratan 5 & 6: Logika Kolom USIA
-    function calculateAge(dateString) {
-        const today = new Date();
-        const birthDate = new Date(dateString);
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-        return age >= 0 ? age : 0;
+      });
+
+      const id_pertandingan = sessionStorage.getItem('current_match');
+      google.script.run.withSuccessHandler(() => {
+        toast('Pendaftaran disimpan', 'success');
+        loadPendaftaranForm(id_pertandingan);
+      }).savePendaftaran({id_pertandingan, id_klub: user.id_klub, daftar: JSON.stringify(daftar)});
     }
 
+    // === BERITA ===
+    function loadBerita() {
+      const el = document.getElementById('berita');
+      el.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
 
-    // --- VIEW FUNCTIONS ---
-    
-    function renderLogin() {
-        // ... (Kode renderLogin sama seperti sebelumnya) ...
-        const html = `
-            <div class="row justify-content-center">
-                <div class="col-md-6 col-lg-4">
-                    <div class="card shadow-lg mt-5">
-                        <div class="card-header bg-primary text-white text-center">
-                            <h4>Login PSSI Mentawai</h4>
-                        </div>
-                        <div class="card-body">
-                            <form id="loginForm">
-                                <div class="mb-3">
-                                    <label for="username" class="form-label">Username</label>
-                                    <input type="text" class="form-control" id="username" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="password" class="form-label">Password</label>
-                                    <input type="password" class="form-control" id="password" required>
-                                </div>
-                                <button type="submit" class="btn btn-primary w-100">Login</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+      google.script.run.withSuccessHandler(berita => {
+        el.innerHTML = `
+          <div class="card mb-3">
+            <div class="card-body">
+              <h6>Buat Berita Baru</h6>
+              <input type="text" id="judulBerita" placeholder="Judul" class="form-control form-control-sm mb-1">
+              <textarea id="isiBerita" placeholder="Isi berita" class="form-control form-control-sm mb-1" rows="3"></textarea>
+              <input type="url" id="fotoUrl" placeholder="URL Foto (imgbb)" class="form-control form-control-sm mb-1">
+              <button class="btn btn-sm btn-success" onclick="saveBeritaBaru()">Publikasikan</button>
             </div>
-        `;
-        $('#app').html(html);
+          </div>`;
 
-        $('#loginForm').on('submit', async function(e) {
-            e.preventDefault();
-            const username = $('#username').val();
-            const password = $('#password').val();
-
-            try {
-                const result = await callAppsScript('login', { username, password });
-                localStorage.setItem('tokenId', result.token_id);
-                localStorage.setItem('userProfile', JSON.stringify(result.user));
-                showNotification(`Selamat datang, ${result.user.username}!`, 'success');
-                renderDashboard(result.user);
-            } catch (error) {
-                // Error ditangani oleh callAppsScript
-            }
+        berita.forEach(b => {
+          const card = document.createElement('div');
+          card.className = 'card mb-2';
+          card.innerHTML = `
+            <div class="card-body p-2">
+              <h6 class="mb-1">${b.judul}</h6>
+              <small class="text-muted">${new Date(b.tgl).toLocaleDateString('id-ID')} - ${b.penulis}</small>
+              <p class="mt-1 mb-2" style="font-size:13px;">${b.isi}</p>
+              ${b.foto ? `<img src="${b.foto}" class="img-fluid rounded" style="max-height:150px;">` : ''}
+            </div>`;
+          el.appendChild(card);
         });
+      }).getBerita();
     }
 
-    async function handleLogout() {
-        const tokenId = localStorage.getItem('tokenId');
-        try {
-            await callAppsScript('logout', { token_id: tokenId });
-        } catch (error) {
-            console.error("Logout error:", error);
-        } finally {
-            localStorage.removeItem('tokenId');
-            localStorage.removeItem('userProfile');
-            showNotification('Anda berhasil logout.', 'info');
-            renderLogin();
-            if (window.chatRefreshInterval) { clearInterval(window.chatRefreshInterval); } // Hentikan refresh chat
-        }
+    function saveBeritaBaru() {
+      const judul = document.getElementById('judulBerita').value;
+      const isi = document.getElementById('isiBerita').value;
+      const foto = document.getElementById('fotoUrl').value;
+      if (!judul || !isi) return toast('Judul dan isi wajib diisi');
+
+      google.script.run.withSuccessHandler(() => {
+        toast('Berita dipublikasikan', 'success');
+        loadBerita();
+      }).saveBerita({judul, isi, foto, penulis: user.nama_lengkap});
     }
 
-    async function renderDashboard(user) {
-        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
-        
-        // Persyaratan 7: ADMIN KLUB TIDAK PUNYA AKSES KE MEDIA BERITA
-        const tabItems = [
-            { id: 'a1', name: 'FORM A1 (Data Klub)', requiredRole: ['ADMIN_PUSAT', 'ADMIN_KLUB'] },
-            { id: 'a2', name: 'FORM A2 (Pemain Kolektif)', requiredRole: ['ADMIN_PUSAT', 'ADMIN_KLUB'] },
-            { id: 'a3', name: 'FORM A3 (Pendaftaran Pertandingan)', requiredRole: ['ADMIN_PUSAT', 'ADMIN_KLUB'] },
-            { id: 'berita', name: 'BERITA PSSI MENTAWAI', requiredRole: ['ADMIN_PUSAT', 'ADMIN_MEDIA'] }, // Hanya untuk non-klub
-            { id: 'chat', name: 'CHATHISTORY ANTAR ADMIN', requiredRole: ['ADMIN_PUSAT', 'ADMIN_MEDIA', 'ADMIN_KLUB'] } // Semua bisa chat
-        ].filter(item => item.requiredRole.includes(user.tipe_user));
+    // === CHAT ===
+    function loadChat() {
+      const el = document.getElementById('chat');
+      el.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
 
-        // Ambil daftar user untuk chat
-        try {
-            allUsers = await callAppsScript('readAllUsernames');
-        } catch (e) {
-            console.error("Gagal memuat daftar user chat:", e);
-            allUsers = [];
-        }
-
-
-        const navHtml = `
-            <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-                <div class="container-fluid">
-                    <a class="navbar-brand" href="#">PSSI Mentawai - ${user.tipe_user}</a>
-                    <div class="d-flex">
-                        <span class="navbar-text text-white me-3">
-                            Login sebagai: <strong>${user.username}</strong>
-                        </span>
-                        <button class="btn btn-outline-light" id="logoutBtn">Logout</button>
-                    </div>
-                </div>
-            </nav>
-        `;
-
-        const tabNavHtml = `
-            <ul class="nav nav-tabs mt-3" id="myTab" role="tablist">
-                ${tabItems.map((item, index) => `
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link ${index === 0 ? 'active' : ''}" id="${item.id}-tab" data-bs-toggle="tab" data-bs-target="#${item.id}-content" type="button" role="tab" aria-controls="${item.id}-content" aria-selected="${index === 0 ? 'true' : 'false'}">
-                            ${item.name}
-                        </button>
-                    </li>
-                `).join('')}
-            </ul>
-        `;
-
-        const contentHtml = tabItems.map((item, index) => `
-            <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" id="${item.id}-content" role="tabpanel" aria-labelledby="${item.id}-tab">
-                <h3 class="mt-3">${item.name}</h3>
-                <div id="content-${item.id}">
-                    ${item.id === 'a1' ? `<button class="btn btn-success my-2" id="openA1Modal">${isKlubAdmin ? 'Input/Edit Data Klub Saya' : 'Tambah Data Klub'}</button><div id="dataA1"></div>` : ''}
-                    ${item.id === 'a2' ? '<button class="btn btn-success my-2" id="openA2Modal">Tambah Pemain Kolektif</button><div id="dataA2"></div>' : ''}
-                    ${item.id === 'a3' ? '<button class="btn btn-info my-2" id="openA3Modal">Input Pendaftaran Pertandingan</button><div id="dataA3"></div>' : ''}
-                    ${item.id === 'berita' ? '<button class="btn btn-warning my-2" id="openBeritaModal">Tulis Berita Baru</button><div id="dataBerita"></div>' : ''}
-                    ${item.id === 'chat' ? '<div id="chatInterface" class="chat-card"></div>' : ''}
-                </div>
+      google.script.run.withSuccessHandler(users => {
+        el.innerHTML = '<div id="chatList"></div>';
+        const list = document.getElementById('chatList');
+        users.forEach(u => {
+          const div = document.createElement('div');
+          div.className = 'd-flex justify-content-between align-items-center p-2 border-bottom';
+          div.onclick = () => openChatWith(u.username, u.nama);
+          div.innerHTML = `
+            <div>
+              <b>${u.nama}</b><span class="${u.active ? 'user-active' : ''}"></span>
             </div>
-        `).join('');
-
-        const html = `
-            ${navHtml}
-            <div class="container mt-3">
-                ${tabNavHtml}
-                <div class="tab-content" id="myTabContent">
-                    ${contentHtml}
-                </div>
-            </div>
-        `;
-        
-        $('#app').html(html);
-
-        $('#logoutBtn').on('click', function() { showConfirmation('Anda yakin ingin logout?', handleLogout); });
-        
-        // Panggil Loaders
-        if (tabItems.some(i => i.id === 'a1')) loadDataA1();
-        if (tabItems.some(i => i.id === 'a2')) loadDataA2();
-        if (tabItems.some(i => i.id === 'a3')) loadDataA3();
-        if (tabItems.some(i => i.id === 'berita')) loadDataBerita();
-        if (tabItems.some(i => i.id === 'chat')) setupChatInterface(user.username);
-        
-        // Event listeners untuk Modal
-        $('#openA1Modal').on('click', () => {
-            if (isKlubAdmin) {
-                renderModalA1(user.id_klub); // ADMIN KLUB selalu edit/input data klubnya sendiri
-            } else {
-                 renderModalA1(); // ADMIN PUSAT/MEDIA bisa menambah baru
-            }
+            <span id="badge_${u.username}" class="badge-unread d-none">0</span>`;
+          list.appendChild(div);
         });
-        $('#openA2Modal').on('click', () => renderModalA2());
-        $('#openA3Modal').on('click', () => renderModalA3());
-        $('#openBeritaModal').on('click', () => renderModalBerita());
+        startChatPolling();
+      }).getChatUsers({username: user.username});
     }
 
-    // --- CRUD/DATA FUNCTIONS (READERS) ---
-    // ... (loadDataA1, loadDataA2, loadDataA3, loadDataBerita - logikanya sudah diperbaiki di backend)
-    async function loadDataA1() {
-        const tokenId = localStorage.getItem('tokenId');
-        const user = JSON.parse(localStorage.getItem('userProfile'));
-        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
-        
-        try {
-            const data = await callAppsScript('readA1', { token_id: tokenId });
-            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_KLUB</th><th>NAMA_RESMI_KLUB</th><th>MANAJER</th><th>HP_MANAJER</th><th>Aksi</th></tr></thead><tbody>';
-            if (data.length > 0) {
-                data.forEach(row => {
-                    // ADMIN KLUB hanya bisa edit data klubnya sendiri, ADMIN PUSAT bisa edit semua
-                    const editButton = (isKlubAdmin && String(row.ID_KLUB) !== String(user.id_klub)) ? 
-                                       `<button class="btn btn-sm btn-secondary" disabled>Edit</button>` :
-                                       `<button class="btn btn-sm btn-info edit-a1" data-id="${row.ID_KLUB}">Edit</button>`;
-
-                    tableHtml += `<tr>
-                        <td>${row.ID_KLUB}</td>
-                        <td>${row.NAMA_RESMI_KLUB}</td>
-                        <td>${row.MANAJER}</td>
-                        <td>${row.HP_MANAJER}</td>
-                        <td>${editButton}</td>
-                    </tr>`;
-                });
-                tableHtml += '</tbody></table>';
-            } else { tableHtml = '<p>Tidak ada data klub (FORM A1).</p>'; }
-            
-            $('#dataA1').html(tableHtml);
-            
-            $('.edit-a1').on('click', function() { renderModalA1($(this).data('id')); });
-        } catch (error) { $('#dataA1').html('<p class="text-danger">Gagal memuat data FORM A1.</p>'); }
-    }
-
-    async function loadDataA2() {
-        const tokenId = localStorage.getItem('tokenId');
-        const user = JSON.parse(localStorage.getItem('userProfile'));
-        const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
-
-        try {
-            const data = await callAppsScript('readA2', { token_id: tokenId });
-            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_PEMAIN</th><th>NAMA_LENGKAP</th><th>NPG</th><th>TANGGAL_LAHIR</th><th>Aksi</th></tr></thead><tbody>';
-            if (data.length > 0) {
-                data.forEach(row => {
-                    const actions = [];
-                    // ADMIN KLUB hanya bisa edit/hapus pemainnya sendiri
-                    if (!isKlubAdmin || (isKlubAdmin && String(row.ID_KLUB) === String(user.id_klub))) {
-                         actions.push(`<button class="btn btn-sm btn-info edit-a2" data-id="${row.ID_PEMAIN}">Edit</button>`);
-                         actions.push(`<button class="btn btn-sm btn-danger delete-a2" data-id="${row.ID_PEMAIN}">Hapus</button>`);
-                    } else {
-                        actions.push(`<button class="btn btn-sm btn-secondary" disabled>Aksi</button>`);
-                    }
-
-                    tableHtml += `<tr>
-                        <td>${row.ID_PEMAIN}</td>
-                        <td>${row.NAMA_LENGKAP}</td>
-                        <td>${row.NPG}</td>
-                        <td>${row.TANGGAL_LAHIR}</td>
-                        <td>${actions.join(' ')}</td>
-                    </tr>`;
-                });
-                tableHtml += '</tbody></table>';
-            } else { tableHtml = '<p>Tidak ada data pemain (FORM A2).</p>'; }
-            
-            $('#dataA2').html(tableHtml);
-
-            $('.edit-a2').on('click', function() { renderModalA2($(this).data('id')); });
-            $('.delete-a2').on('click', function() {
-                const id = $(this).data('id');
-                showConfirmation(`Yakin ingin menghapus pemain ID ${id}?`, () => handleDeleteA2(id));
-            });
-        } catch (error) { $('#dataA2').html('<p class="text-danger">Gagal memuat data FORM A2.</p>'); }
-    }
-
-    async function loadDataA3() {
-        // Logika tampilan sama, filternya sudah di backend
-        const tokenId = localStorage.getItem('tokenId');
-        try {
-            const data = await callAppsScript('readA3', { token_id: tokenId });
-            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_LINE-UP</th><th>TANGGAL</th><th>ID_KLUB</th><th>POSISI</th></tr></thead><tbody>';
-            if (data.length > 0) {
-                data.forEach(row => {
-                    tableHtml += `<tr>
-                        <td>${row['ID_LINE-UP']}</td>
-                        <td>${row.TANGGAL_PERTANDINGAN}</td>
-                        <td>${row.ID_KLUB}</td>
-                        <td>${row.POSISI}</td>
-                    </tr>`;
-                });
-                tableHtml += '</tbody></table>';
-            } else { tableHtml = '<p>Belum ada pendaftaran pertandingan (FORM A3).</p>'; }
-            $('#dataA3').html(tableHtml);
-        } catch (error) { $('#dataA3').html('<p class="text-danger">Gagal memuat data FORM A3.</p>'); }
-    }
-
-    async function loadDataBerita() {
-        // Logika CRUD Berita tetap hanya untuk Admin Pusat/Media, karena akses tab sudah difilter
-        try {
-            const data = await callAppsScript('readBerita');
-            let tableHtml = '<table class="table table-striped table-bordered table-sm"><thead><tr><th>ID_BERITA</th><th>TANGGAL</th><th>JUDUL_BERITA</th><th>PENULIS</th><th>Aksi</th></tr></thead><tbody>';
-            if (data.length > 0) {
-                data.forEach(row => {
-                    tableHtml += `<tr>
-                        <td>${row.ID_BERITA}</td>
-                        <td>${row.TANGGAL}</td>
-                        <td>${row.JUDUL_BERITA}</td>
-                        <td>${row.PENULIS}</td>
-                        <td>
-                            <button class="btn btn-sm btn-info view-berita" data-id="${row.ID_BERITA}">Lihat/Edit</button>
-                            <button class="btn btn-sm btn-danger delete-berita" data-id="${row.ID_BERITA}">Hapus</button>
-                        </td>
-                    </tr>`;
-                });
-                tableHtml += '</tbody></table>';
-            } else { tableHtml = '<p>Tidak ada berita.</p>'; }
-            
-            $('#dataBerita').html(tableHtml);
-
-            $('.view-berita').on('click', function() { renderModalBerita($(this).data('id')); });
-            $('.delete-berita').on('click', function() {
-                const id = $(this).data('id');
-                showConfirmation(`Yakin ingin menghapus berita ID ${id}?`, () => handleDeleteBerita(id));
-            });
-        } catch (error) { $('#dataBerita').html('<p class="text-danger">Gagal memuat data Berita.</p>'); }
-    }
-    
-    // --- MODAL RENDERING (Diperbaiki UI-nya) ---
-
-// 1. FORM A1 (DATA KLUB) - Dibuat PERSIS seperti gambar dan responsif
-async function renderModalA1(idKlubToEdit = null) {
-    const user = JSON.parse(localStorage.getItem('userProfile'));
-    const isKlubAdmin = user.tipe_user === 'ADMIN_KLUB';
-    
-    // ADMIN KLUB hanya bisa input/edit data klubnya sendiri
-    if (isKlubAdmin && !idKlubToEdit) {
-        idKlubToEdit = user.id_klub; // Coba ambil data klubnya jika ada
-    }
-    
-    const isEdit = idKlubToEdit !== null;
-    const modalId = 'modalA1';
-    $(`#${modalId}`).remove();
-    
-    const modalA1Html = `
-        <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA1Label" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered-top modal-xl">
-                <div class="modal-content">
-                    <div class="modal-header bg-primary text-white"><h5 class="modal-title" id="modalA1Label">${isEdit ? 'Edit' : 'Tambah'} Data Klub (FORM A-1)</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
-                    <div class="modal-body">
-                        <form id="formA1">
-                            
-                            <h5 class="border-bottom pb-2 text-primary">Informasi Kompetisi</h5>
-                            <div class="alert alert-light border p-2 mb-4" role="alert">
-                                **KOMPETISI:** LIGA ASKAB PSSI KEPUALAUN MENTAWAI TAHUN 2025 [cite: 51]
-                            </div>
-
-                            <div class="row mb-4 bg-warning bg-opacity-25 p-3 border rounded">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-bold">ID KLUB</label>
-                                    <input type="text" class="form-control" name="ID_KLUB" id="idKlubA1" value="${isKlubAdmin ? user.id_klub : ''}" required ${isKlubAdmin || isEdit ? 'readonly' : ''}>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-bold">NAMA KLUB</label>
-                                    <input type="text" class="form-control" name="NAMA_RESMI_KLUB" required>
-                                </div>
-                            </div>
-
-                            <h5 class="border-bottom pb-2 text-primary">DATA KLUB:</h5>
-
-                            <div class="row">
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">NAMA RESMI KLUB:</label>
-                                    <input type="text" class="form-control" name="NAMA_RESMI_KLUB" required>
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">JULUKAN KLUB:</label>
-                                    <input type="text" class="form-control" name="JULUKAN_KLUB">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">TANGGAL BERDIRI:</label>
-                                    <input type="date" class="form-control" name="TANGGAL_BERDIRI">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">ALAMAT:</label>
-                                    <input type="text" class="form-control" name="ALAMAT">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">DESA:</label>
-                                    <input type="text" class="form-control" name="DESA">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">KECAMATAN:</label>
-                                    <input type="text" class="form-control" name="KECAMATAN">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">PROVINSI:</label>
-                                    <input type="text" class="form-control" name="PROVINSI">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">NO. HANDPHONE (KLUB):</label>
-                                    <input type="tel" class="form-control" name="NO_HANDPHONE">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">EMAIL (KLUB):</label>
-                                    <input type="email" class="form-control" name="EMAIL">
-                                </div>
-                            </div>
-
-                            <h5 class="mt-4 border-bottom pb-2 text-primary">DATA PENGURUS KLUB: <small class="text-muted">(ISI SESUAI KETERSEDIAAN KLUB)</small></h5>
-
-                            <div class="row">
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">MANAJER:</label>
-                                    <input type="text" class="form-control me-2" name="MANAJER" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_MANAJER" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">ASISTEN MANAJER:</label>
-                                    <input type="text" class="form-control me-2" name="ASISTEN_MANAJER" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_ASISTEN_MANAJER" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">SEKRETARIS:</label>
-                                    <input type="text" class="form-control me-2" name="SEKRETARIS" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_SEKRETARIS" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">BENDAHARA:</label>
-                                    <input type="text" class="form-control me-2" name="BENDAHARA" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_BENDAHARA" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">MEDIA/STAFF MEDIA:</label>
-                                    <input type="text" class="form-control me-2" name="STAFF_MEDIA" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_STAFF_MEDIA" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">PELATIH:</label>
-                                    <input type="text" class="form-control me-2" name="PELATIH" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_PELATIH" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">ASISTEN PELATIH:</label>
-                                    <input type="text" class="form-control me-2" name="ASISTEN_PELATIH" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_ASISTEN_PELATIH" placeholder="No. Handphone">
-                                </div>
-                                <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">STAFF LAINNYA 1:</label>
-                                    <input type="text" class="form-control me-2" name="STAFF_LAINNYA_1" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_STAFF_LAINNYA_1" placeholder="No. Handphone">
-                                </div>
-                                 <div class="col-md-6 mb-3 d-flex align-items-center">
-                                    <label class="form-label me-2 text-end fw-bold" style="min-width: 150px;">STAFF LAINNYA 2:</label>
-                                    <input type="text" class="form-control me-2" name="STAFF_LAINNYA_2" placeholder="Nama Pengurus">
-                                    <input type="tel" class="form-control" name="HP_STAFF_LAINNYA_2" placeholder="No. Handphone">
-                                </div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary mt-3 w-100" id="submitA1Btn">${isEdit ? 'Perbarui Data Klub' : 'Simpan Data Klub'}</button>
-                        </form>
-                    </div>
-                </div>
+    function openChatWith(username, nama) {
+      currentChat = {username, nama};
+      const el = document.getElementById('chat');
+      el.innerHTML = `
+        <div class="card">
+          <div class="card-header d-flex justify-content-between">
+            <b>${nama}</b>
+            <button class="btn btn-sm btn-secondary" onclick="loadChat()">Kembali</button>
+          </div>
+          <div class="card-body p-2" id="chatMessages" style="height:60vh; overflow-y:auto; font-size:13px;"></div>
+          <div class="card-footer p-2">
+            <div class="input-group">
+              <input type="text" id="msgInput" class="form-control form-control-sm" placeholder="Ketik pesan..." onkeypress="if(event.key==='Enter') sendChat()">
+              <button class="btn btn-primary btn-sm" onclick="sendChat()">Kirim</button>
             </div>
-        </div>
-    `;
-
-    $('body').append(modalA1Html);
-    const modalA1Instance = new bootstrap.Modal(document.getElementById(modalId));
-    
-    // Logika pengisian data saat Edit
-    if (idKlubToEdit) {
-        try {
-            const data = await callAppsScript('readA1ById', { id_klub: idKlubToEdit });
-            if (data) {
-                $.each(data, function(key, value) {
-                    // Penyesuaian nama field untuk staff lainnya
-                    let fieldName = key;
-                    if (key === 'MANAJER') fieldName = 'MANAJER'; // Nama pengurus
-                    if (key === 'HP_MANAJER') fieldName = 'HP_MANAJER'; // HP pengurus
-                    if (key === 'ASISTEN_MANEJER') fieldName = 'ASISTEN_MANAJER'; // Perbaikan typo dari PDF
-                    if (key === 'HP_ASISTEN_MANEJER') fieldName = 'HP_ASISTEN_MANAJER';
-                    if (key === 'STAFF_LAINNYA') fieldName = 'STAFF_LAINNYA_1'; // Asumsi STAFF LAINNYA di PDF adalah STAFF LAINNYA 1
-                    
-                    // Isi nama
-                    if (key === 'MANAJER' || key === 'ASISTEN_MANEJER' || key === 'SEKRETARIS' || key === 'BENDAHARA' || key === 'MEDIA' || key === 'PELATIH' || key === 'ASISTEN_PELATIH' || key === 'STAFF_LAINNYA') {
-                        $(`#formA1 [name="${fieldName}"]`).first().val(value);
-                    } 
-                    // Isi HP
-                    else if (key.startsWith('HP_')) {
-                        $(`#formA1 [name="${key}"]`).val(value);
-                    }
-                    // Isi data klub lainnya
-                    else if ($(`#formA1 [name="${key}"]`).length && !key.startsWith('HP_')) {
-                        $(`#formA1 [name="${key}"]`).val(value);
-                    }
-                });
-                
-                // Isi data yang tidak standar:
-                // Cek fields yang sudah ada di HTML
-                const fieldNames = ['MANAJER', 'ASISTEN_MANAJER', 'SEKRETARIS', 'BENDAHARA', 'STAFF_MEDIA', 'PELATIH', 'ASISTEN_PELATIH', 'STAFF_LAINNYA_1', 'STAFF_LAINNYA_2'];
-                
-                fieldNames.forEach(name => {
-                    const hpName = `HP_${name}`;
-                    // Jika ada data di sheet, gunakan data sheet
-                    if(data[name]) {
-                        $(`#formA1 [name="${name}"]`).first().val(data[name]);
-                    }
-                    if(data[hpName]) {
-                        $(`#formA1 [name="${hpName}"]`).last().val(data[hpName]);
-                    }
-                });
-
-                // Khusus untuk field NAMA RESMI KLUB (di PDF kolom NAMA KLUB)
-                const namaKlubInput = $(`#formA1 [name="NAMA_RESMI_KLUB"]`).first();
-                if (data['NAMA_RESMI_KLUB']) {
-                     namaKlubInput.val(data['NAMA_RESMI_KLUB']);
-                } else if (data['NAMA_KLUB']) {
-                     namaKlubInput.val(data['NAMA_KLUB']);
-                }
-            }
-        } catch (error) { /* Handled */ }
+          </div>
+        </div>`;
+      loadMessages();
+      markAsRead();
     }
-    
-    modalA1Instance.show();
 
-    $('#formA1').off('submit').on('submit', async function(e) {
-        e.preventDefault();
-        const record = {};
-        $(this).serializeArray().forEach(item => { 
-             // Pastikan nama field tidak ada duplikasi akibat custom HTML
-            if(item.name === 'NAMA_RESMI_KLUB') {
-                // Ambil nilai dari input NAMA_RESMI_KLUB (di baris ID KLUB)
-                if (record['NAMA_RESMI_KLUB'] === undefined || record['NAMA_RESMI_KLUB'] === '') {
-                     record['NAMA_RESMI_KLUB'] = item.value;
-                }
-            } else if (item.name === 'MANAJER' || item.name === 'ASISTEN_MANAJER' || item.name === 'SEKRETARIS' || item.name === 'BENDAHARA' || item.name === 'STAFF_MEDIA' || item.name === 'PELATIH' || item.name === 'ASISTEN_PELATIH' || item.name === 'STAFF_LAINNYA_1' || item.name === 'STAFF_LAINNYA_2') {
-                // Jangan timpa jika sudah ada nilainya (karena input nama dan hp memiliki nama yang sama di HTML)
-                if (record[item.name] === undefined || record[item.name] === '') {
-                     record[item.name] = item.value;
-                }
-            } else {
-                record[item.name] = item.value; 
-            }
+    function loadMessages() {
+      if (!currentChat) return;
+      google.script.run.withSuccessHandler(msgs => {
+        const box = document.getElementById('chatMessages');
+        box.innerHTML = '';
+        msgs.forEach(m => {
+          const div = document.createElement('div');
+          div.className = `mb-2 ${m.pengirim === user.username ? 'text-end' : ''}`;
+          div.innerHTML = `
+            <div class="d-inline-block p-2 rounded ${m.pengirim === user.username ? 'bg-primary text-white' : 'bg-light'}" style="max-width:80%;">
+              <small class="d-block">${m.pengirim === user.username ? 'Anda' : currentChat.nama}</small>
+              ${m.pesan}
+              <small class="d-block text-end" style="font-size:10px;">${new Date(m.timestamp).toLocaleTimeString('id-ID')}</small>
+            </div>`;
+          box.appendChild(div);
         });
+        box.scrollTop = box.scrollHeight;
+      }).getMessages({sender: user.username, receiver: currentChat.username});
+    }
 
-        if (isKlubAdmin) { record.ID_KLUB = user.id_klub; } // Ambil dari sesi untuk keamanan
+    function sendChat() {
+      const input = document.getElementById('msgInput');
+      const pesan = input.value.trim();
+      if (!pesan) return;
+      google.script.run.withSuccessHandler(() => {
+        input.value = '';
+        loadMessages();
+        updateBadge(currentChat.username, true);
+      }).sendMessage({sender: user.username, receiver: currentChat.username, pesan});
+    }
 
-        try {
-            const result = await callAppsScript('createUpdateA1', { record });
-            showNotification(`Data Klub ID ${result.id} berhasil di${result.action === 'created' ? 'simpan' : 'perbarui'}!`, 'success');
-            modalA1Instance.hide();
-            loadDataA1();
-        } catch (error) { /* Handled */ }
+    function markAsRead() {
+      if (!currentChat) return;
+      google.script.run.withSuccessHandler(() => {
+        updateBadge(currentChat.username, false);
+      }).markAsRead({sender: currentChat.username, receiver: user.username});
+    }
+
+    function startChatPolling() {
+      chatInterval = setInterval(() => {
+        if (currentChat) loadMessages();
+        updateAllBadges();
+      }, 3000);
+    }
+
+    function updateAllBadges() {
+      google.script.run.withSuccessHandler(users => {
+        users.forEach(u => {
+          google.script.run.withSuccessHandler(msgs => {
+            const count = msgs.filter(m => m.is_read === 'NO').length;
+            const badge = document.getElementById(`badge_${u.username}`);
+            if (badge) {
+              badge.textContent = count;
+              badge.classList.toggle('d-none', count === 0);
+            }
+          }).getMessages({sender: u.username, receiver: user.username});
+        });
+      }).getChatUsers({username: user.username});
+    }
+
+    function updateBadge(username, increment) {
+      const badge = document.getElementById(`badge_${username}`);
+      if (!badge) return;
+      let count = parseInt(badge.textContent) || 0;
+      badge.textContent = increment ? count + 1 : 0;
+      badge.classList.toggle('d-none', count === 0 && !increment);
+    }
+
+    // Back button
+    window.addEventListener('popstate', () => {
+      const pages = ['home','pemain','jadwal','berita','chat'];
+      const current = pages.find(p => !document.getElementById(p).classList.contains('d-none'));
+      const idx = pages.indexOf(current);
+      if (idx > 0) showPage(pages[idx - 1]);
     });
-}
 
-    // 2. FORM A2 (PEMAIN KOLEKTIF) - Disesuaikan UI-nya dengan FORM A2.pdf
-    async function renderModalA2(id_pemain_to_edit = null) {
-        const isEdit = id_pemain_to_edit !== null;
-        const modalId = 'modalA2';
-        const user = JSON.parse(localStorage.getItem('userProfile'));
-        $(`#${modalId}`).remove();
-        
-        const modalA2Html = `
-            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA2Label" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered-top modal-md">
-                    <div class="modal-content">
-                        <div class="modal-header bg-success text-white"><h5 class="modal-title" id="modalA2Label">${isEdit ? 'Edit' : 'Tambah'} Pemain Kolektif (A2)</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
-                        <div class="modal-body">
-                            <form id="formA2">
-                                <input type="hidden" name="mode" value="${isEdit ? 'update' : 'create'}">
-                                <input type="hidden" name="ID_KLUB" value="${user.id_klub}">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3"><label class="form-label">ID_KLUB</label><input type="text" class="form-control" value="${user.id_klub}" disabled></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA KLUB</label><input type="text" class="form-control" name="NAMA_KLUB"></div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">ID PEMAIN (15/16 Digit Angka)</label>
-                                    <input type="text" class="form-control" id="id_pemainA2" name="ID_PEMAIN" required minlength="15" maxlength="16" ${isEdit ? 'readonly' : ''}>
-                                    <div id="idPlayerValidation" class="form-text text-danger"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA LENGKAP</label><input type="text" class="form-control" name="NAMA_LENGKAP" required></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">NPG (No. Punggung)</label><input type="number" class="form-control" name="NPG"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">TANGGAL LAHIR</label><input type="date" class="form-control" name="TANGGAL_LAHIR" id="tanggalLahirA2"></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">USIA</label><input type="number" class="form-control" name="USIA" id="usiaA2" readonly></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">KETERANGAN</label><input type="text" class="form-control" name="KETERANGAN"></div>
-                                </div>
-                                <button type="submit" class="btn btn-success mt-3 w-100">${isEdit ? 'Perbarui Data' : 'Simpan Pemain'}</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        $('body').append(modalA2Html);
-        const modalA2Instance = new bootstrap.Modal(document.getElementById(modalId));
-        
-        if (isEdit) {
-            try {
-                const data = await callAppsScript('readA2ById', { id_pemain: id_pemain_to_edit });
-                if (data) {
-                    $.each(data, function(key, value) {
-                         // Tangani konversi Date object/timestamp dari Apps Script
-                        if (key === 'TANGGAL_LAHIR' && value) {
-                            const date = new Date(value);
-                            const formattedDate = date.toISOString().substring(0, 10);
-                            $(`#formA2 [name="${key}"]`).val(formattedDate);
-                            $('#usiaA2').val(calculateAge(formattedDate)); // Hitung usia saat edit
-                        } else {
-                            $(`#formA2 [name="${key}"]`).val(value);
-                        }
-                    });
-                }
-            } catch (error) { /* Handled */ }
-        }
-
-        modalA2Instance.show();
-
-        // Persyaratan 5 & 6: Auto-hitung usia dan validasi ID Pemain
-        $('#tanggalLahirA2').on('change', function() {
-            const dob = $(this).val();
-            if (dob) {
-                $('#usiaA2').val(calculateAge(dob));
-            } else {
-                $('#usiaA2').val('');
-            }
-        });
-
-        $('#id_pemainA2').on('blur', async function() {
-            const id = $(this).val();
-            const validation = $('#idPlayerValidation');
-            validation.text('').removeClass('text-success').addClass('text-danger');
-
-            if (!/^\d{15,16}$/.test(id)) {
-                validation.text('ID PEMAIN harus 15 atau 16 digit angka.');
-                return;
-            }
-
-            if (!isEdit) { // Hanya cek keunikan saat CREATE
-                try {
-                    const result = await callAppsScript('checkPlayerIdUnique', { id_pemain: id });
-                    if (!result.isUnique) {
-                        validation.text(result.message);
-                    } else {
-                        validation.text('ID unik. ✅').removeClass('text-danger').addClass('text-success');
-                    }
-                } catch (error) {
-                    validation.text(error.message); 
-                }
-            }
-        });
-
-        $('#formA2').off('submit').on('submit', async function(e) {
-            e.preventDefault();
-            const record = {};
-            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
-
-            if (!isEdit && !$('#idPlayerValidation').hasClass('text-success')) {
-                return showNotification('Mohon perbaiki validasi ID Pemain.', 'warning');
-            }
-
-            try {
-                const result = await callAppsScript('createUpdateA2', { record });
-                showNotification(`Pemain ID ${result.id} berhasil di${result.action === 'created' ? 'simpan' : 'perbarui'}!`, 'success');
-                modalA2Instance.hide();
-                loadDataA2(); 
-            } catch (error) {
-                 showNotification(`Gagal menyimpan data A2: ${error.message}`, 'danger');
-            }
-        });
-    }
-
-    // 3. FORM A3 (PENDAFTARAN PERTANDINGAN) - Disesuaikan UI-nya dengan FORM A3.pdf
-    function renderModalA3() {
-        const modalId = 'modalA3';
-        const user = JSON.parse(localStorage.getItem('userProfile'));
-        $(`#${modalId}`).remove();
-        
-        const modalA3Html = `
-            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalA3Label" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered-top modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header bg-info text-white"><h5 class="modal-title" id="modalA3Label">Form A3: Pendaftaran Pertandingan</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
-                        <div class="modal-body">
-                            <form id="formA3">
-                                <h5 class="border-bottom pb-2">Informasi Pertandingan</h5>
-                                <div class="row">
-                                    <div class="col-md-4 mb-3"><label class="form-label">ID LINE-UP</label><input type="text" class="form-control" name="ID_LINE-UP" required></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">TANGGAL PERTANDINGAN</label><input type="date" class="form-control" name="TANGGAL_PERTANDINGAN" required></div>
-                                    <div class="col-md-4 mb-3"><label class="form-label">LOKASI PERTANDINGAN</label><input type="text" class="form-control" name="LOKASI_PERTANDINGAN"></div>
-                                </div>
-                                
-                                <h5 class="mt-4 border-bottom pb-2">Detail Pemain</h5>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">ID KLUB</label><input type="text" class="form-control" name="ID_KLUB" value="${user.id_klub}" readonly></div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">ID PEMAIN</label><input type="text" class="form-control" name="ID_PEMAIN" required></div>
-                                    <div class="col-md-6 mb-3"><label class="form-label">NAMA PUNGGUNG</label><input type="text" class="form-control" name="NAMA_PUNGGUNG"></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3"><label class="form-label">NO PUNGGUNG</label><input type="number" class="form-control" name="NO_PUNGGUNG"></div>
-                                    <div class="col-md-3 mb-3">
-                                        <label class="form-label">POSISI</label>
-                                        <select class="form-control" name="POSISI">
-                                            <option value="">Pilih Posisi</option>
-                                            <option value="KIPER">KIPER</option>
-                                            <option value="BEK">BEK</option>
-                                            <option value="GELANDANG">GELANDANG</option>
-                                            <option value="SAYAP">SAYAP</option>
-                                            <option value="PENYERANG">PENYERANG</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label class="form-label">TIPE PEMAIN</label>
-                                        <select class="form-control" name="TIPE_PEMAIN">
-                                            <option value="PEMAIN UTAMA">PEMAIN UTAMA</option>
-                                            <option value="PEMAIN CADANGAN">PEMAIN CADANGAN</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-3"><label class="form-label">USIA</label><input type="number" class="form-control" name="USIA"></div>
-                                </div>
-                                <button type="submit" class="btn btn-info mt-3 w-100">Simpan Pendaftaran</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        $('body').append(modalA3Html);
-        const modalA3Instance = new bootstrap.Modal(document.getElementById(modalId));
-        modalA3Instance.show();
-
-        // Event handler submit form
-        $('#formA3').off('submit').on('submit', async function(e) {
-            e.preventDefault();
-            const record = {};
-            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
-
-            try {
-                const result = await callAppsScript('createA3', { record });
-                showNotification(`Pendaftaran Pertandingan ID ${result.id} berhasil disimpan!`, 'success');
-                modalA3Instance.hide();
-                loadDataA3();
-            } catch (error) {
-                 showNotification(`Gagal menyimpan data A3: ${error.message}`, 'danger');
-            }
-        });
-    }
-
-    // 8. FORM BERITA - Tidak diubah signifikan, karena UI sudah oke.
-
-    async function renderModalBerita(id_berita_to_edit = null) {
-        // ... (Kode renderModalBerita sama seperti sebelumnya) ...
-        const isEdit = id_berita_to_edit !== null;
-        const modalId = 'modalBerita';
-        const user = JSON.parse(localStorage.getItem('userProfile'));
-        $(`#${modalId}`).remove();
-
-        const modalBeritaHtml = `
-            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="modalBeritaLabel" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered-top modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header bg-warning"><h5 class="modal-title" id="modalBeritaLabel">${isEdit ? 'Edit' : 'Buat'} Berita PSSI Mentawai</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-                        <div class="modal-body">
-                            <form id="formBerita">
-                                <input type="hidden" name="ID_BERITA" value="${id_berita_to_edit || ''}">
-                                <input type="hidden" name="PENULIS" value="${user.username}">
-                                <input type="hidden" name="TANGGAL" value="">
-
-                                <div class="mb-3">
-                                    <label for="judulBerita" class="form-label">JUDUL_BERITA</label>
-                                    <input type="text" class="form-control" id="judulBerita" name="JUDUL_BERITA" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="isiBerita" class="form-label">ISI_BERITA</label>
-                                    <textarea class="form-control" id="isiBerita" name="ISI_BERITA" rows="10" required></textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="potoUrl" class="form-label">POTO_URL (Link Gambar)</label>
-                                    <input type="url" class="form-control" id="potoUrl" name="POTO_URL">
-                                </div>
-                                <button type="submit" class="btn btn-warning mt-3 w-100">${isEdit ? 'Perbarui Berita' : 'Publikasikan Berita'}</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        $('body').append(modalBeritaHtml);
-        const modalBeritaInstance = new bootstrap.Modal(document.getElementById(modalId));
-        
-        if (isEdit) {
-            try {
-                const data = await callAppsScript('readBeritaById', { id_berita: id_berita_to_edit });
-                if (data) {
-                    $.each(data, function(key, value) {
-                         $(`#formBerita [name="${key}"]`).val(value);
-                    });
-                }
-            } catch (error) { /* Handled */ }
-        }
-        
-        modalBeritaInstance.show();
-
-        $('#formBerita').off('submit').on('submit', async function(e) {
-            e.preventDefault();
-            const record = {};
-            $(this).serializeArray().forEach(item => { record[item.name] = item.value; });
-
-            try {
-                const result = await callAppsScript('createUpdateBerita', { record });
-                showNotification(`Berita ID ${result.id} berhasil di${result.action === 'created' ? 'publikasikan' : 'perbarui'}!`, 'success');
-                modalBeritaInstance.hide();
-                loadDataBerita();
-            } catch (error) { /* Handled */ }
-        });
-    }
-
-    // 4. & 8. CHATHISTORY_ANTAR_ADMIN (Dapat Saling Berkabar)
-    let chatRefreshInterval;
-
-    function setupChatInterface(currentUser) {
-        const chatContainer = $('#chatInterface');
-        const userOptions = allUsers.filter(u => u.username !== currentUser).map(u => 
-            `<option value="${u.username}">${u.username} (${u.tipe_user})</option>`
-        ).join('');
-        
-        chatContainer.html(`
-            <div class="card h-100 chat-card">
-                <div class="card-header bg-secondary text-white">Chat Antar Admin</div>
-                <div class="card-body chat-body" id="chatBody"></div>
-                <div class="card-footer">
-                    <form id="chatForm" class="d-flex">
-                        <select class="form-select me-2" name="penerima" required style="max-width: 250px;">
-                            <option value="">Pilih Penerima</option>
-                            <option value="ALL">Semua Admin</option>
-                            ${userOptions}
-                        </select>
-                        <input type="text" class="form-control me-2" name="isi_chat" placeholder="Tulis pesan..." required>
-                        <button type="submit" class="btn btn-primary">Kirim</button>
-                    </form>
-                </div>
-            </div>
-        `);
-
-        if (chatRefreshInterval) { clearInterval(chatRefreshInterval); }
-        loadChatHistory();
-        chatRefreshInterval = setInterval(loadChatHistory, 15000); // Refresh setiap 15 detik
-
-        $('#chatForm').on('submit', async function(e) {
-            e.preventDefault();
-            const penerima = $(this).find('select[name="penerima"]').val();
-            const isi_chat = $(this).find('input[name="isi_chat"]').val();
-
-            if (!penerima || !isi_chat) { return showNotification('Penerima dan isi chat wajib diisi.', 'warning'); }
-
-            try {
-                await callAppsScript('sendChat', { penerima, isi_chat });
-                $(this).find('input[name="isi_chat"]').val('');
-                loadChatHistory();
-            } catch (error) { showNotification('Gagal mengirim pesan.', 'danger'); }
-        });
-    }
-
-    async function loadChatHistory() {
-        const chatBody = $('#chatBody');
-        const userProfile = JSON.parse(localStorage.getItem('userProfile'));
-        if (!userProfile) return;
-        const currentUser = userProfile.username;
-
-        try {
-            const history = await callAppsScript('readChat');
-            chatBody.empty();
-            
-            // Render dari yang paling lama ke paling baru, dan scroll ke bawah
-            history.reverse().forEach(chat => { 
-                // Logika pesan ditampilkan jika: 
-                // 1. Pengirimnya adalah user ini. 
-                // 2. Penerimanya adalah user ini.
-                // 3. Penerimanya adalah 'ALL'.
-                const isMe = chat.PENGIRIM === currentUser;
-                const isRecipient = chat.PENERIMA === currentUser;
-                const isAll = chat.PENERIMA === 'ALL';
-
-                if (isMe || isRecipient || isAll) {
-                    const alignClass = isMe ? 'justify-content-end' : 'justify-content-start';
-                    const time = new Date(chat.TANGGAL_CHAT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    
-                    let recipientText = '';
-                    if (!isMe && !isAll) {
-                        recipientText = `Pribadi ke Anda`;
-                    } else if (!isMe && isAll) {
-                        recipientText = `Pesan Grup`;
-                    } else if (isMe && chat.PENERIMA !== 'ALL') {
-                        recipientText = `ke ${chat.PENERIMA}`;
-                    } else if (isMe && chat.PENERIMA === 'ALL') {
-                        recipientText = `ke Semua Admin`;
-                    }
-
-                    const chatHtml = `
-                        <div class="d-flex ${alignClass} w-100">
-                            <div class="chat-message ${isMe ? 'me' : 'other'}">
-                                <small class="text-muted d-block" style="font-size: 0.75em;">
-                                    <strong>${chat.PENGIRIM}</strong> ${recipientText}
-                                </small>
-                                <p class="mb-0">${chat.ISI_CHAT}</p>
-                                <span class="d-block text-end text-muted" style="font-size: 0.6em;">${time}</span>
-                            </div>
-                        </div>
-                    `;
-                    chatBody.append(chatHtml);
-                }
-            });
-            chatBody.scrollTop(chatBody.prop("scrollHeight"));
-        } catch (error) {
-            console.error('Failed to load chat history:', error);
-            chatBody.html('<p class="text-danger">Gagal memuat riwayat chat.</p>');
-        }
-    }
-
-
-    // --- INITIALIZATION ---
-    async function init() {
-        // ... (Kode init sama seperti sebelumnya) ...
-        const tokenId = localStorage.getItem('tokenId');
-        const userProfileJson = localStorage.getItem('userProfile');
-
-        if (tokenId && userProfileJson) {
-            try {
-                const sessionCheck = await callAppsScript('checkSession', { token_id: tokenId });
-                
-                if (sessionCheck.isActive) {
-                    renderDashboard(sessionCheck.user);
-                } else {
-                    localStorage.removeItem('tokenId');
-                    localStorage.removeItem('userProfile');
-                    showNotification('Sesi Anda telah berakhir. Silakan login kembali.', 'warning');
-                    renderLogin();
-                }
-            } catch (error) {
-                renderLogin();
-            }
-        } else {
-            renderLogin();
-        }
-    }
-
-    $(document).ready(init);
-
-</script>
+    // Inisialisasi Google Apps Script
+    (function() { 
+      const s = document.createElement('script'); 
+      s.src = SCRIPT_URL + '?v=' + new Date().getTime(); 
+      document.head.appendChild(s); 
+    })();
+  </script>
 </body>
 </html>
