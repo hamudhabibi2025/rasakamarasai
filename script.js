@@ -1,3 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kunci Inspect Element</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .shortcut {
+            font-weight: bold;
+            color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🔑 Kunci (Shortcut) Inspect Element</h1>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Aksi</th>
+                <th>Windows & Linux</th>
+                <th>macOS (Apple)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>**Buka Developer Tools**</td>
+                <td class="shortcut">F12</td>
+                <td class="shortcut">Cmd + Option + I</td>
+            </tr>
+            <tr>
+                <td>**Buka Developer Tools**</td>
+                <td class="shortcut">Ctrl + Shift + I</td>
+                <td class="shortcut">Cmd + Option + J</td>
+            </tr>
+            <tr>
+                <td>**Inspect Element Langsung**</td>
+                <td class="shortcut">Ctrl + Shift + C</td>
+                <td class="shortcut">Cmd + Shift + C</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Cara Alternatif (Klik Kanan)</h3>
+    <ol>
+        <li>Arahkan kursor ke elemen pada halaman yang ingin Anda periksa.</li>
+        <li>**Klik Kanan** (*Right Click*).</li>
+        <li>Pilih opsi **"Inspect"** atau **"Periksa Elemen"**.</li>
+    </ol>
+
+</body>
+</html>
 // GANTI DENGAN URL APPS SCRIPT ANDA SETELAH DEPLOY
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzzn7ZieFMApGz0qxdljK6aa1okfDOSuCh8h1i8-LKe066umohUR4DlVIDz-Kg8ieHY/exec'; 
 const IMGBB_API_KEY = 'e9c06944a26b81e611e960c10a31634f'; 
