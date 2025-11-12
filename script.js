@@ -36,15 +36,16 @@ function showToast(message, isSuccess = true) {
 }
 
 /**
- * Memperbaiki masalah format URL ImgBB yang mungkin tidak tampil di browser.
- * Menstandarkan semua domain i.ibb.co.com/ (seringkali salah) menjadi i.ibb.co/ (domain direct link standar).
+ * Memperbaiki masalah format URL ImgBB agar gambar muncul di semua browser.
+ * BERDASARKAN FEEDBACK PENGGUNA: Mengganti domain standar 'i.ibb.co/' 
+ * yang tersimpan di sheet menjadi domain 'i.ibb.co.com/' yang berfungsi.
  */
 const fixImgbbUrl = (url) => {
     if (!url || typeof url !== 'string') return url;
     
-    // Asumsi: i.ibb.co.com/ adalah format yang salah dan harus dikembalikan ke i.ibb.co/
-    if (url.includes('i.ibb.co.com/')) {
-        return url.replace('i.ibb.co.com/', 'i.ibb.co/');
+    // Melakukan perbaikan spesifik sesuai permintaan
+    if (url.includes('i.ibb.co/') && !url.includes('i.ibb.co.com/')) {
+        return url.replace('i.ibb.co/', 'i.ibb.co.com/');
     }
     
     return url;
@@ -157,6 +158,7 @@ async function uploadImage(file) {
 
         if (result.success) {
             // Mengembalikan DIRECT LINK ImgBB (https://i.ibb.co/...)
+            // Link ini akan diperbaiki oleh fixImgbbUrl saat rendering jika perlu.
             return result.data.url; 
         } else {
             showToast(`Gagal unggah gambar: ${result.error.message}`, false);
@@ -176,6 +178,7 @@ async function loadStaticData() {
     const headerData = await fetchAPI('kepala_halaman', 'READ', {});
     if (headerData) {
         ALL_DATA.kepala_halaman = headerData;
+        // Panggil fixImgbbUrl saat merender gambar
         document.getElementById('logo_pssi').src = fixImgbbUrl(headerData.logo_pssi);
         document.getElementById('judul_kepala').textContent = headerData.judul_kepala;
         document.getElementById('logo_askab').src = fixImgbbUrl(headerData.logo_askab);
@@ -187,6 +190,7 @@ async function loadStaticData() {
         const bannerInner = document.getElementById('banner-inner');
         bannerInner.innerHTML = '';
         
+        // Panggil fixImgbbUrl saat merender banner
         const images = [
             fixImgbbUrl(bannerData['poto-1']), 
             fixImgbbUrl(bannerData['poto-2']), 
@@ -356,7 +360,6 @@ function resetForm(formId) {
     if (idMap[formId]) {
         document.getElementById(idMap[formId]).value = '';
         document.getElementById(modalMap[formId].label).textContent = modalMap[formId].title;
-        // modalMap[formId].modal.hide(); // Dihapus karena akan ditutup setelah submit/reset manual
     }
 }
 
